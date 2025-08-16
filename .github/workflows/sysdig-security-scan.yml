@@ -32,11 +32,11 @@ jobs:
           dockerfile-path: ./
           input-type: "iac"
           run-as-user: "root"
-          # v6의 새로운 기능들
+          # v6의 새로운 기능들 (recursive 플래그 제거)
           stop-on-failed-policy-eval: false
           stop-on-policy-eval-failure: false
           use-policies: true
-          extra-parameters: "--recursive --format json"
+          extra-parameters: "--format json"
 
       - name: Upload IaC Scan Results
         if: always()
@@ -338,7 +338,7 @@ jobs:
           echo "## 🆕 Sysdig v6 핵심 기능 활용" >> sysdig-security-report.md
           echo "### 향상된 정책 평가" >> sysdig-security-report.md
           echo "- ✅ **use-policies: true** - 정책 기반 평가 활성화" >> sysdig-security-report.md
-          echo "- ✅ **extra-parameters: --format json --verbose** - 상세 결과 제공" >> sysdig-security-report.md
+          echo "- ✅ **extra-parameters: --format json** - JSON 형식 결과 제공" >> sysdig-security-report.md
           echo "- ✅ **stop-on-failed-policy-eval: false** - 유연한 정책 처리" >> sysdig-security-report.md
           echo "" >> sysdig-security-report.md
           echo "### GitHub 통합" >> sysdig-security-report.md
