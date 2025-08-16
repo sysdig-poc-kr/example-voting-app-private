@@ -1,4 +1,4 @@
-name: Sysdig Security Scan
+name: Sysdig Security Scan (Official Style)
 
 on:
   push:
@@ -30,20 +30,12 @@ jobs:
           minimum-severity: medium
           stop-on-failed-policy-eval: false
           stop-on-processing-error: false
-        continue-on-error: true
-
-      - name: Check IaC Scan Results
-        run: |
-          echo "Checking for IaC scan result files..."
-          ls -la
-          find . -name "*.sarif" -o -name "scan-result.json" -o -name "sysdig-results.*" 2>/dev/null || echo "No result files found"
 
       - name: Upload IaC SARIF to GitHub
-        if: always() && hashFiles('*.sarif') != ''
+        if: success() || failure()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ${{ hashFiles('*.sarif') }}
-        continue-on-error: true
+          sarif_file: ${{ github.workspace }}/sarif.json
 
       - name: Upload IaC Scan Results
         if: always()
@@ -51,9 +43,8 @@ jobs:
         with:
           name: sysdig-iac-results
           path: |
-            *.sarif
+            sarif.json
             scan-result.json
-            sysdig-results.*
           if-no-files-found: warn
 
   # Vote 서비스 빌드 및 스캔
@@ -67,46 +58,29 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image locally (for scanning)
-        id: build-local
+      - name: Build Docker image locally
         run: |
           echo "Building vote image..."
           docker build -t vote-local:${{ github.sha }} ./vote --target final
-          echo "Checking if image exists..."
-          docker images | grep vote-local || echo "Image not found in list"
-          echo "local-image=vote-local:${{ github.sha }}" >> $GITHUB_OUTPUT
+          docker images | grep vote-local
 
-      - name: Run Sysdig Secure Scan (Vote)
-        id: sysdig-scan
-        run: |
-          # Sysdig CLI 스캐너 직접 다운로드 및 실행
-          curl -sL https://download.sysdig.com/scanning/bin/sysdig-cli-scanner/latest_version.txt -o latest_version.txt
-          LATEST_VERSION=$(cat latest_version.txt)
-          curl -sL "https://download.sysdig.com/scanning/bin/sysdig-cli-scanner/${LATEST_VERSION}/linux/amd64/sysdig-cli-scanner" -o sysdig-cli-scanner
-          chmod +x sysdig-cli-scanner
-          
-          # 스캔 실행 (오류 발생해도 계속 진행)
-          ./sysdig-cli-scanner \
-            --apiurl "${{ secrets.SYSDIG_SECURE_ENDPOINT }}" \
-            --secure-api-token "${{ secrets.SYSDIG_SECURE_API_TOKEN }}" \
-            --policy=true \
-            --output=json-file=vote-scan-result.json \
-            --output=sarif-file=vote-results.sarif \
-            vote-local:${{ github.sha }} || echo "Scan completed with issues"
-        continue-on-error: true
-
-      - name: Check Vote Scan Results
-        run: |
-          echo "Checking for vote scan result files..."
-          ls -la
-          find . -name "*vote*" -o -name "*.sarif" -o -name "*.json" 2>/dev/null || echo "No result files found"
+      - name: Scan Vote Image
+        id: scan
+        uses: sysdiglabs/scan-action@v6
+        with:
+          image-tag: vote-local:${{ github.sha }}
+          sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
+          sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
+          mode: vm
+          severity-at-least: medium
+          stop-on-failed-policy-eval: false
+          stop-on-processing-error: false
 
       - name: Upload Vote SARIF to GitHub
-        if: always() && hashFiles('vote-results.sarif') != ''
+        if: success() || failure()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: vote-results.sarif
-        continue-on-error: true
+          sarif_file: ${{ github.workspace }}/sarif.json
 
       - name: Upload Vote Scan Results
         if: always()
@@ -114,10 +88,8 @@ jobs:
         with:
           name: sysdig-vote-results
           path: |
-            vote-*.sarif
-            vote-*.json
-            *.sarif
-            *.json
+            sarif.json
+            scan-result.json
           if-no-files-found: warn
 
   # Worker 서비스 빌드 및 스캔
@@ -131,40 +103,29 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image locally (for scanning)
-        id: build-local
+      - name: Build Docker image locally
         run: |
           echo "Building worker image..."
           docker build -t worker-local:${{ github.sha }} ./worker
-          echo "Checking if image exists..."
-          docker images | grep worker-local || echo "Image not found in list"
-          echo "local-image=worker-local:${{ github.sha }}" >> $GITHUB_OUTPUT
+          docker images | grep worker-local
 
-      - name: Run Sysdig Secure Scan (Worker)
-        id: sysdig-scan
-        run: |
-          # Sysdig CLI 스캐너 직접 다운로드 및 실행
-          curl -sL https://download.sysdig.com/scanning/bin/sysdig-cli-scanner/latest_version.txt -o latest_version.txt
-          LATEST_VERSION=$(cat latest_version.txt)
-          curl -sL "https://download.sysdig.com/scanning/bin/sysdig-cli-scanner/${LATEST_VERSION}/linux/amd64/sysdig-cli-scanner" -o sysdig-cli-scanner
-          chmod +x sysdig-cli-scanner
-          
-          # 스캔 실행 (오류 발생해도 계속 진행)
-          ./sysdig-cli-scanner \
-            --apiurl "${{ secrets.SYSDIG_SECURE_ENDPOINT }}" \
-            --secure-api-token "${{ secrets.SYSDIG_SECURE_API_TOKEN }}" \
-            --policy=true \
-            --output=json-file=worker-scan-result.json \
-            --output=sarif-file=worker-results.sarif \
-            worker-local:${{ github.sha }} || echo "Scan completed with issues"
-        continue-on-error: true
+      - name: Scan Worker Image
+        id: scan
+        uses: sysdiglabs/scan-action@v6
+        with:
+          image-tag: worker-local:${{ github.sha }}
+          sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
+          sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
+          mode: vm
+          severity-at-least: medium
+          stop-on-failed-policy-eval: false
+          stop-on-processing-error: false
 
       - name: Upload Worker SARIF to GitHub
-        if: always() && hashFiles('worker-results.sarif') != ''
+        if: success() || failure()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: worker-results.sarif
-        continue-on-error: true
+          sarif_file: ${{ github.workspace }}/sarif.json
 
       - name: Upload Worker Scan Results
         if: always()
@@ -172,10 +133,8 @@ jobs:
         with:
           name: sysdig-worker-results
           path: |
-            worker-*.sarif
-            worker-*.json
-            *.sarif
-            *.json
+            sarif.json
+            scan-result.json
           if-no-files-found: warn
 
   # Result 서비스 빌드 및 스캔
@@ -189,40 +148,29 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image locally (for scanning)
-        id: build-local
+      - name: Build Docker image locally
         run: |
           echo "Building result image..."
           docker build -t result-local:${{ github.sha }} ./result
-          echo "Checking if image exists..."
-          docker images | grep result-local || echo "Image not found in list"
-          echo "local-image=result-local:${{ github.sha }}" >> $GITHUB_OUTPUT
+          docker images | grep result-local
 
-      - name: Run Sysdig Secure Scan (Result)
-        id: sysdig-scan
-        run: |
-          # Sysdig CLI 스캐너 직접 다운로드 및 실행
-          curl -sL https://download.sysdig.com/scanning/bin/sysdig-cli-scanner/latest_version.txt -o latest_version.txt
-          LATEST_VERSION=$(cat latest_version.txt)
-          curl -sL "https://download.sysdig.com/scanning/bin/sysdig-cli-scanner/${LATEST_VERSION}/linux/amd64/sysdig-cli-scanner" -o sysdig-cli-scanner
-          chmod +x sysdig-cli-scanner
-          
-          # 스캔 실행 (오류 발생해도 계속 진행)
-          ./sysdig-cli-scanner \
-            --apiurl "${{ secrets.SYSDIG_SECURE_ENDPOINT }}" \
-            --secure-api-token "${{ secrets.SYSDIG_SECURE_API_TOKEN }}" \
-            --policy=true \
-            --output=json-file=result-scan-result.json \
-            --output=sarif-file=result-results.sarif \
-            result-local:${{ github.sha }} || echo "Scan completed with issues"
-        continue-on-error: true
+      - name: Scan Result Image
+        id: scan
+        uses: sysdiglabs/scan-action@v6
+        with:
+          image-tag: result-local:${{ github.sha }}
+          sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
+          sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
+          mode: vm
+          severity-at-least: medium
+          stop-on-failed-policy-eval: false
+          stop-on-processing-error: false
 
       - name: Upload Result SARIF to GitHub
-        if: always() && hashFiles('result-results.sarif') != ''
+        if: success() || failure()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: result-results.sarif
-        continue-on-error: true
+          sarif_file: ${{ github.workspace }}/sarif.json
 
       - name: Upload Result Scan Results
         if: always()
@@ -230,8 +178,6 @@ jobs:
         with:
           name: sysdig-result-results
           path: |
-            result-*.sarif
-            result-*.json
-            *.sarif
-            *.json
+            sarif.json
+            scan-result.json
           if-no-files-found: warn
