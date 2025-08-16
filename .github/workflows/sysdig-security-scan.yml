@@ -70,8 +70,20 @@ jobs:
         id: build-local
         run: |
           # 로컬에서 이미지 빌드 (스캔용)
+          echo "Building vote image..."
           docker build -t vote-local:${{ github.sha }} ./vote --target final
+          echo "Checking if image exists..."
+          docker images | grep vote-local
           echo "local-image=vote-local:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Debug - List Docker images
+        run: |
+          echo "Available Docker images:"
+          docker images
+          echo "Checking vote image specifically:"
+          docker inspect vote-local:${{ github.sha }} || echo "Image not found"
+          echo "Trying to run image test:"
+          docker run --rm vote-local:${{ github.sha }} echo "Image is working" || echo "Image run failed"
 
       - name: Run Sysdig Secure Scan (Local Image)
         uses: sysdiglabs/scan-action@v6
