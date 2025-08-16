@@ -1,0 +1,307 @@
+# Sysdig 컴플라이언스 모니터링 설정
+# Voting App을 위한 보안 컴플라이언스 벤치마크 및 정책
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sysdig-compliance-config
+  namespace: voting-app
+  annotations:
+    sysdig.com/policy-zone: "voting-app-zone"
+data:
+  # CIS Kubernetes Benchmark 설정
+  cis-kubernetes-benchmark.yaml: |
+    apiVersion: compliance.sysdig.com/v1
+    kind: ComplianceBenchmark
+    metadata:
+      name: cis-kubernetes-benchmark
+      description: "CIS Kubernetes Benchmark v1.6.1"
+    spec:
+      framework: "CIS"
+      version: "1.6.1"
+      scope:
+        namespaces: ["voting-app"]
+        
+      controls:
+        # 1. Master Node Security Configuration
+        - id: "1.1.1"
+          title: "API server pod specification file permissions"
+          description: "API 서버 파드 사양 파일 권한 확인"
+          severity: "HIGH"
+          automated: true
+          
+        - id: "1.1.2"
+          title: "API server pod specification file ownership"
+          description: "API 서버 파드 사양 파일 소유권 확인"
+          severity: "HIGH"
+          automated: true
+          
+        # 2. etcd Security Configuration
+        - id: "2.1"
+          title: "etcd certificate file permissions"
+          description: "etcd 인증서 파일 권한 확인"
+          severity: "HIGH"
+          automated: true
+          
+        # 3. Control Plane Configuration
+        - id: "3.1.1"
+          title: "Client certificate authentication"
+          description: "클라이언트 인증서 인증 사용"
+          severity: "MEDIUM"
+          automated: true
+          
+        # 4. Worker Node Security Configuration
+        - id: "4.1.1"
+          title: "Kubelet service file permissions"
+          description: "Kubelet 서비스 파일 권한 확인"
+          severity: "HIGH"
+          automated: true
+          
+        # 5. Kubernetes Policies
+        - id: "5.1.1"
+          title: "RBAC is enabled"
+          description: "RBAC 활성화 확인"
+          severity: "HIGH"
+          automated: true
+          
+        - id: "5.1.3"
+          title: "Minimize wildcard use in Roles and ClusterRoles"
+          description: "Role과 ClusterRole에서 와일드카드 사용 최소화"
+          severity: "MEDIUM"
+          automated: true
+          
+        - id: "5.2.2"
+          title: "Minimize the admission of containers with allowPrivilegeEscalation"
+          description: "권한 상승을 허용하는 컨테이너 최소화"
+          severity: "HIGH"
+          automated: true
+          
+        - id: "5.2.3"
+          title: "Minimize the admission of root containers"
+          description: "루트 컨테이너 허용 최소화"
+          severity: "HIGH"
+          automated: true
+          
+        - id: "5.2.5"
+          title: "Minimize the admission of containers with capabilities"
+          description: "특별한 권한을 가진 컨테이너 최소화"
+          severity: "MEDIUM"
+          automated: true
+
+  # CIS Docker Benchmark 설정
+  cis-docker-benchmark.yaml: |
+    apiVersion: compliance.sysdig.com/v1
+    kind: ComplianceBenchmark
+    metadata:
+      name: cis-docker-benchmark
+      description: "CIS Docker Benchmark v1.4.0"
+    spec:
+      framework: "CIS"
+      version: "1.4.0"
+      scope:
+        images: 
+          - "ghcr.io/*/example-voting-app/vote:*"
+          - "ghcr.io/*/example-voting-app/worker:*"
+          - "ghcr.io/*/example-voting-app/result:*"
+        
+      controls:
+        # 4. Container Images and Build File
+        - id: "4.1"
+          title: "Create a user for the container"
+          description: "컨테이너용 사용자 생성"
+          severity: "HIGH"
+          automated: true
+          
+        - id: "4.2"
+          title: "Use trusted base images for containers"
+          description: "신뢰할 수 있는 베이스 이미지 사용"
+          severity: "MEDIUM"
+          automated: true
+          
+        - id: "4.3"
+          title: "Do not install unnecessary packages in the container"
+          description: "불필요한 패키지 설치 금지"
+          severity: "MEDIUM"
+          automated: true
+          
+        - id: "4.6"
+          title: "Add HEALTHCHECK instruction to the container image"
+          description: "컨테이너 이미지에 HEALTHCHECK 명령 추가"
+          severity: "LOW"
+          automated: true
+          
+        - id: "4.7"
+          title: "Do not use update instructions alone in the Dockerfile"
+          description: "Dockerfile에서 update 명령만 단독 사용 금지"
+          severity: "LOW"
+          automated: true
+          
+        # 5. Container Runtime
+        - id: "5.1"
+          title: "Do not disable AppArmor Profile"
+          description: "AppArmor 프로필 비활성화 금지"
+          severity: "MEDIUM"
+          automated: true
+          
+        - id: "5.2"
+          title: "Do not disable SELinux security options"
+          description: "SELinux 보안 옵션 비활성화 금지"
+          severity: "MEDIUM"
+          automated: true
+          
+        - id: "5.3"
+          title: "Restrict Linux Kernel Capabilities within containers"
+          description: "컨테이너 내 Linux 커널 권한 제한"
+          severity: "HIGH"
+          automated: true
+
+  # NIST Cybersecurity Framework 설정
+  nist-framework.yaml: |
+    apiVersion: compliance.sysdig.com/v1
+    kind: ComplianceBenchmark
+    metadata:
+      name: nist-cybersecurity-framework
+      description: "NIST Cybersecurity Framework v1.1"
+    spec:
+      framework: "NIST"
+      version: "1.1"
+      scope:
+        namespaces: ["voting-app"]
+        
+      functions:
+        # Identify (ID)
+        identify:
+          - category: "ID.AM"
+            title: "Asset Management"
+            controls:
+              - id: "ID.AM-1"
+                title: "Physical devices and systems are inventoried"
+                description: "물리적 장치 및 시스템 목록 관리"
+                severity: "MEDIUM"
+              - id: "ID.AM-2"
+                title: "Software platforms and applications are inventoried"
+                description: "소프트웨어 플랫폼 및 애플리케이션 목록 관리"
+                severity: "MEDIUM"
+                
+        # Protect (PR)
+        protect:
+          - category: "PR.AC"
+            title: "Access Control"
+            controls:
+              - id: "PR.AC-1"
+                title: "Identities and credentials are issued, managed, verified, revoked"
+                description: "신원 및 자격 증명 관리"
+                severity: "HIGH"
+              - id: "PR.AC-4"
+                title: "Access permissions and authorizations are managed"
+                description: "접근 권한 및 인증 관리"
+                severity: "HIGH"
+                
+        # Detect (DE)
+        detect:
+          - category: "DE.AE"
+            title: "Anomalies and Events"
+            controls:
+              - id: "DE.AE-1"
+                title: "A baseline of network operations and expected data flows"
+                description: "네트워크 운영 및 예상 데이터 흐름 기준선"
+                severity: "MEDIUM"
+              - id: "DE.AE-3"
+                title: "Event data are collected and correlated"
+                description: "이벤트 데이터 수집 및 상관관계 분석"
+                severity: "HIGH"
+                
+        # Respond (RS)
+        respond:
+          - category: "RS.RP"
+            title: "Response Planning"
+            controls:
+              - id: "RS.RP-1"
+                title: "Response plan is executed during or after an incident"
+                description: "사고 발생 시 대응 계획 실행"
+                severity: "HIGH"
+                
+        # Recover (RC)
+        recover:
+          - category: "RC.RP"
+            title: "Recovery Planning"
+            controls:
+              - id: "RC.RP-1"
+                title: "Recovery plan is executed during or after a cybersecurity incident"
+                description: "사이버보안 사고 후 복구 계획 실행"
+                severity: "HIGH"
+
+  # 컴플라이언스 스케줄 설정
+  compliance-schedule.yaml: |
+    apiVersion: compliance.sysdig.com/v1
+    kind: ComplianceSchedule
+    metadata:
+      name: voting-app-compliance-schedule
+    spec:
+      zone: "voting-app-zone"
+      
+      schedules:
+        - name: "daily-cis-scan"
+          benchmark: "cis-kubernetes-benchmark"
+          cron: "0 2 * * *"  # 매일 오전 2시
+          enabled: true
+          
+        - name: "weekly-docker-scan"
+          benchmark: "cis-docker-benchmark"
+          cron: "0 3 * * 0"  # 매주 일요일 오전 3시
+          enabled: true
+          
+        - name: "monthly-nist-assessment"
+          benchmark: "nist-cybersecurity-framework"
+          cron: "0 4 1 * *"  # 매월 1일 오전 4시
+          enabled: true
+      
+      notifications:
+        - type: "email"
+          recipients: ["security-team@company.com"]
+          events: ["scan-completed", "violation-detected", "critical-finding"]
+          
+        - type: "slack"
+          webhook: "${SLACK_WEBHOOK_URL}"
+          events: ["critical-finding", "high-severity-violation"]
+          
+        - type: "pagerduty"
+          integration_key: "${PAGERDUTY_INTEGRATION_KEY}"
+          events: ["critical-finding"]
+
+  # 컴플라이언스 리포트 설정
+  compliance-reporting.yaml: |
+    apiVersion: compliance.sysdig.com/v1
+    kind: ComplianceReporting
+    metadata:
+      name: voting-app-compliance-reporting
+    spec:
+      zone: "voting-app-zone"
+      
+      reports:
+        - name: "weekly-security-summary"
+          type: "summary"
+          frequency: "weekly"
+          format: ["pdf", "json"]
+          recipients: ["security-team@company.com", "devops-team@company.com"]
+          
+        - name: "monthly-executive-report"
+          type: "executive"
+          frequency: "monthly"
+          format: ["pdf"]
+          recipients: ["ciso@company.com", "cto@company.com"]
+          
+        - name: "quarterly-audit-report"
+          type: "detailed"
+          frequency: "quarterly"
+          format: ["pdf", "csv"]
+          recipients: ["audit-team@company.com", "compliance-team@company.com"]
+      
+      dashboards:
+        - name: "voting-app-compliance-dashboard"
+          url: "/compliance/voting-app"
+          widgets:
+            - "compliance-score"
+            - "violation-trends"
+            - "benchmark-status"
+            - "remediation-progress"

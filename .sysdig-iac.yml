@@ -1,0 +1,94 @@
+# Sysdig IaC 스캔 설정
+# Infrastructure as Code 보안 정책 및 규칙 정의
+
+# 스캔 대상 경로
+scan_paths:
+  - "k8s-specifications/"
+  - "docker-compose.yml"
+  - "docker-stack.yml"
+  - "*/Dockerfile"
+
+# 제외할 파일/경로
+exclude_paths:
+  - ".git/"
+  - "node_modules/"
+  - "*.md"
+  - "*.png"
+
+# 보안 정책 설정
+policies:
+  # Kubernetes 보안 정책
+  kubernetes:
+    # 컨테이너 보안
+    - rule: "no-privileged-containers"
+      severity: "high"
+      description: "특권 컨테이너 사용 금지"
+    
+    - rule: "no-root-user"
+      severity: "medium"
+      description: "루트 사용자로 실행 금지"
+    
+    - rule: "resource-limits-required"
+      severity: "medium"
+      description: "리소스 제한 설정 필수"
+    
+    - rule: "security-context-required"
+      severity: "medium"
+      description: "보안 컨텍스트 설정 필수"
+    
+    # 네트워크 보안
+    - rule: "network-policies-required"
+      severity: "low"
+      description: "네트워크 정책 설정 권장"
+    
+    # 시크릿 관리
+    - rule: "no-hardcoded-secrets"
+      severity: "critical"
+      description: "하드코딩된 시크릿 사용 금지"
+
+  # Docker 보안 정책
+  docker:
+    - rule: "no-latest-tag"
+      severity: "low"
+      description: "latest 태그 사용 지양"
+    
+    - rule: "minimal-base-image"
+      severity: "medium"
+      description: "최소한의 베이스 이미지 사용"
+    
+    - rule: "non-root-user"
+      severity: "medium"
+      description: "비루트 사용자로 실행"
+    
+    - rule: "health-check-required"
+      severity: "low"
+      description: "헬스체크 설정 권장"
+
+# 컴플라이언스 프레임워크
+compliance:
+  frameworks:
+    - "CIS Docker Benchmark"
+    - "CIS Kubernetes Benchmark"
+    - "NIST Cybersecurity Framework"
+    - "PCI DSS"
+
+# 알림 설정
+notifications:
+  # 심각도별 알림 임계값
+  thresholds:
+    critical: 0  # 치명적 취약점 0개 초과 시 실패
+    high: 5      # 높은 위험도 취약점 5개 초과 시 경고
+    medium: 10   # 중간 위험도 취약점 10개 초과 시 경고
+    low: 20      # 낮은 위험도 취약점 20개 초과 시 정보
+
+# 리포트 설정
+reporting:
+  formats:
+    - "json"
+    - "sarif"
+    - "table"
+  
+  output_path: "./sysdig-iac-results/"
+  
+  include_passed: true
+  include_suppressed: false

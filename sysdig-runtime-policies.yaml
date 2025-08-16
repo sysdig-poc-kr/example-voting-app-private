@@ -1,0 +1,212 @@
+# Sysdig 런타임 보안 정책
+# Voting App을 위한 실시간 위협 탐지 및 대응 정책
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sysdig-runtime-policies
+  namespace: voting-app
+  annotations:
+    sysdig.com/policy-zone: "voting-app-zone"
+data:
+  # Vote 서비스 런타임 정책
+  vote-policy.yaml: |
+    apiVersion: v1
+    kind: Policy
+    metadata:
+      name: vote-runtime-policy
+      description: "Vote 서비스를 위한 런타임 보안 정책"
+    spec:
+      scope:
+        - container.image contains "vote"
+        - k8s.namespace.name = "voting-app"
+      
+      rules:
+        # 파일 시스템 보안
+        - name: "Suspicious File Access"
+          description: "의심스러운 파일 접근 탐지"
+          condition: >
+            (fd.name contains "/etc/passwd" or 
+             fd.name contains "/etc/shadow" or 
+             fd.name contains "/etc/hosts" or
+             fd.name contains "/root/") and 
+            not proc.name in (python, gunicorn)
+          output: "의심스러운 파일 접근 탐지 (user=%user.name command=%proc.cmdline file=%fd.name)"
+          priority: HIGH
+          
+        - name: "Unauthorized Network Connection"
+          description: "승인되지 않은 네트워크 연결"
+          condition: >
+            (fd.type=ipv4 or fd.type=ipv6) and 
+            not fd.sip in (redis_ip_range) and
+            not fd.sport in (80, 443, 6379) and
+            evt.type=connect
+          output: "승인되지 않은 네트워크 연결 (user=%user.name command=%proc.cmdline connection=%fd.name)"
+          priority: MEDIUM
+          
+        - name: "Process Execution Monitoring"
+          description: "프로세스 실행 모니터링"
+          condition: >
+            spawned_process and 
+            not proc.name in (python, gunicorn, sh, bash, curl, wget) and
+            not proc.pname in (python, gunicorn)
+          output: "예상치 못한 프로세스 실행 (user=%user.name parent=%proc.pname command=%proc.cmdline)"
+          priority: MEDIUM
+
+  # Worker 서비스 런타임 정책
+  worker-policy.yaml: |
+    apiVersion: v1
+    kind: Policy
+    metadata:
+      name: worker-runtime-policy
+      description: "Worker 서비스를 위한 런타임 보안 정책"
+    spec:
+      scope:
+        - container.image contains "worker"
+        - k8s.namespace.name = "voting-app"
+      
+      rules:
+        - name: "Database Connection Monitoring"
+          description: "데이터베이스 연결 모니터링"
+          condition: >
+            (fd.type=ipv4 or fd.type=ipv6) and 
+            fd.sport != 5432 and fd.sport != 6379 and
+            evt.type=connect and
+            not fd.sip in (postgres_ip_range, redis_ip_range)
+          output: "승인되지 않은 데이터베이스 연결 (user=%user.name command=%proc.cmdline connection=%fd.name)"
+          priority: HIGH
+          
+        - name: "Sensitive Data Access"
+          description: "민감한 데이터 접근 모니터링"
+          condition: >
+            (fd.name contains "password" or 
+             fd.name contains "secret" or 
+             fd.name contains "key") and
+            evt.type in (open, openat)
+          output: "민감한 데이터 접근 탐지 (user=%user.name command=%proc.cmdline file=%fd.name)"
+          priority: HIGH
+
+  # Result 서비스 런타임 정책
+  result-policy.yaml: |
+    apiVersion: v1
+    kind: Policy
+    metadata:
+      name: result-runtime-policy
+      description: "Result 서비스를 위한 런타임 보안 정책"
+    spec:
+      scope:
+        - container.image contains "result"
+        - k8s.namespace.name = "voting-app"
+      
+      rules:
+        - name: "Web Application Security"
+          description: "웹 애플리케이션 보안 모니터링"
+          condition: >
+            (proc.name = node or proc.pname = node) and
+            (fd.name contains "../" or 
+             fd.name contains "/etc/" or
+             fd.name contains "/proc/") and
+            evt.type in (open, openat)
+          output: "웹 애플리케이션 보안 위반 (user=%user.name command=%proc.cmdline file=%fd.name)"
+          priority: HIGH
+          
+        - name: "SQL Injection Attempt"
+          description: "SQL 인젝션 시도 탐지"
+          condition: >
+            proc.name = node and
+            (proc.cmdline contains "SELECT" or 
+             proc.cmdline contains "INSERT" or 
+             proc.cmdline contains "UPDATE" or 
+             proc.cmdline contains "DELETE") and
+            proc.cmdline contains "'"
+          output: "SQL 인젝션 시도 탐지 (user=%user.name command=%proc.cmdline)"
+          priority: CRITICAL
+
+  # 공통 보안 정책
+  common-policy.yaml: |
+    apiVersion: v1
+    kind: Policy
+    metadata:
+      name: common-runtime-policy
+      description: "모든 서비스에 적용되는 공통 런타임 보안 정책"
+    spec:
+      scope:
+        - k8s.namespace.name = "voting-app"
+      
+      rules:
+        - name: "Privilege Escalation"
+          description: "권한 상승 시도 탐지"
+          condition: >
+            (proc.name in (sudo, su, passwd, chsh, chfn, chage, setuid, setgid) or
+             (spawned_process and proc.vpid=1)) and
+            not user.name = root
+          output: "권한 상승 시도 탐지 (user=%user.name command=%proc.cmdline)"
+          priority: CRITICAL
+          
+        - name: "Container Escape Attempt"
+          description: "컨테이너 탈출 시도 탐지"
+          condition: >
+            (proc.name in (docker, kubectl, crictl, runc, ctr) or
+             fd.name in (/var/run/docker.sock, /run/containerd/containerd.sock) or
+             (proc.cmdline contains "nsenter" and proc.cmdline contains "/proc/1/ns"))
+          output: "컨테이너 탈출 시도 탐지 (user=%user.name command=%proc.cmdline)"
+          priority: CRITICAL
+          
+        - name: "Crypto Mining Detection"
+          description: "암호화폐 채굴 탐지"
+          condition: >
+            proc.name in (xmrig, cpuminer, cgminer, bfgminer, sgminer) or
+            proc.cmdline contains "stratum+tcp" or
+            proc.cmdline contains "mining" or
+            (proc.name contains "miner" and not proc.name contains "prometheus")
+          output: "암호화폐 채굴 활동 탐지 (user=%user.name command=%proc.cmdline)"
+          priority: HIGH
+          
+        - name: "Reverse Shell Detection"
+          description: "리버스 쉘 탐지"
+          condition: >
+            (proc.name in (nc, ncat, netcat, socat) and 
+             (proc.cmdline contains "-e" or proc.cmdline contains "-c" or proc.cmdline contains "/bin/sh")) or
+            (proc.name in (bash, sh) and 
+             (proc.cmdline contains "/dev/tcp" or proc.cmdline contains ">&"))
+          output: "리버스 쉘 시도 탐지 (user=%user.name command=%proc.cmdline)"
+          priority: CRITICAL
+
+---
+# Sysdig Falco 규칙 설정
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sysdig-falco-rules
+  namespace: voting-app
+data:
+  voting_app_rules.yaml: |
+    # Voting App 전용 Falco 규칙
+    
+    - rule: Voting App Suspicious Activity
+      desc: Voting App에서 의심스러운 활동 탐지
+      condition: >
+        k8s.ns.name = "voting-app" and
+        (spawned_process or 
+         (evt.type in (open, openat) and fd.name contains "/etc/") or
+         (evt.type = connect and not fd.sip in (cluster_ip_range)))
+      output: >
+        Voting App에서 의심스러운 활동 탐지 
+        (user=%user.name pod=%k8s.pod.name container=%container.name 
+         command=%proc.cmdline file=%fd.name connection=%fd.name)
+      priority: WARNING
+      tags: [voting-app, security, suspicious]
+      
+    - rule: Voting App Database Access Violation
+      desc: 승인되지 않은 데이터베이스 접근
+      condition: >
+        k8s.ns.name = "voting-app" and
+        evt.type = connect and
+        fd.sport = 5432 and
+        not k8s.pod.label.app in (worker, result)
+      output: >
+        승인되지 않은 데이터베이스 접근 
+        (user=%user.name pod=%k8s.pod.name container=%container.name 
+         connection=%fd.name)
+      priority: ERROR
+      tags: [voting-app, database, unauthorized-access]

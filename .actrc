@@ -1,0 +1,6 @@
+# act 설정 파일
+# 로컬 테스트용 Docker 이미지 설정
+
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+-P ubuntu-22.04=catthehacker/ubuntu:act-22.04
+-P ubuntu-20.04=catthehacker/ubuntu:act-20.04

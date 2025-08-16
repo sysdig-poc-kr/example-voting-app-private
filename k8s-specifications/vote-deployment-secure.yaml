@@ -1,0 +1,175 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: vote
+    version: v1
+    component: frontend
+    tier: web
+  name: vote
+  namespace: voting-app
+  annotations:
+    sysdig.com/policy-zone: "voting-app-zone"
+    sysdig.com/compliance: "cis-kubernetes"
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: vote
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: vote
+        version: v1
+        component: frontend
+        tier: web
+      annotations:
+        sysdig.com/monitor: "true"
+        sysdig.com/runtime-policy: "voting-app-policy"
+    spec:
+      # 보안 컨텍스트 설정
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # 서비스 어카운트
+      serviceAccountName: vote-service-account
+      automountServiceAccountToken: false
+      
+      containers:
+      - name: vote
+        image: ghcr.io/your-org/example-voting-app/vote:latest
+        imagePullPolicy: Always
+        
+        # 포트 설정
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        
+        # 환경 변수
+        env:
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: FLASK_ENV
+          value: "production"
+        
+        # 리소스 제한
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        
+        # 보안 컨텍스트
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - NET_BIND_SERVICE
+        
+        # 헬스체크
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        # 볼륨 마운트
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: cache-volume
+          mountPath: /usr/local/app/cache
+      
+      # 볼륨 정의
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}
+      - name: cache-volume
+        emptyDir: {}
+      
+      # 노드 선택 및 배치 정책
+      nodeSelector:
+        kubernetes.io/os: linux
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - vote
+              topologyKey: kubernetes.io/hostname
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vote-service-account
+  namespace: voting-app
+  annotations:
+    sysdig.com/monitor: "true"
+automountServiceAccountToken: false
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: voting-app
+  name: vote-role
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vote-role-binding
+  namespace: voting-app
+subjects:
+- kind: ServiceAccount
+  name: vote-service-account
+  namespace: voting-app
+roleRef:
+  kind: Role
+  name: vote-role
+  apiGroup: rbac.authorization.k8s.io

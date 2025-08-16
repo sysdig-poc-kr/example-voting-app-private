@@ -1,0 +1,221 @@
+# Voting App 네트워크 보안 정책
+# 마이크로서비스 간 통신을 제한하여 보안 강화
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vote-network-policy
+  namespace: voting-app
+  annotations:
+    sysdig.com/policy-zone: "voting-app-zone"
+spec:
+  podSelector:
+    matchLabels:
+      app: vote
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # 외부 트래픽 허용 (LoadBalancer/NodePort를 통한 접근)
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 80
+  egress:
+  # Redis 접근 허용
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # DNS 해결을 위한 kube-system 접근
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: worker-network-policy
+  namespace: voting-app
+  annotations:
+    sysdig.com/policy-zone: "voting-app-zone"
+spec:
+  podSelector:
+    matchLabels:
+      app: worker
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress: []  # Worker는 외부 접근 불필요
+  egress:
+  # Redis 접근 허용
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # PostgreSQL 접근 허용
+  - to:
+    - podSelector:
+        matchLabels:
+          app: db
+    ports:
+    - protocol: TCP
+      port: 5432
+  # DNS 해결을 위한 kube-system 접근
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: result-network-policy
+  namespace: voting-app
+  annotations:
+    sysdig.com/policy-zone: "voting-app-zone"
+spec:
+  podSelector:
+    matchLabels:
+      app: result
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # 외부 트래픽 허용 (LoadBalancer/NodePort를 통한 접근)
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 80
+  egress:
+  # PostgreSQL 접근 허용
+  - to:
+    - podSelector:
+        matchLabels:
+          app: db
+    ports:
+    - protocol: TCP
+      port: 5432
+  # DNS 해결을 위한 kube-system 접근
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-network-policy
+  namespace: voting-app
+  annotations:
+    sysdig.com/policy-zone: "voting-app-zone"
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Vote 서비스로부터의 접근 허용
+  - from:
+    - podSelector:
+        matchLabels:
+          app: vote
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Worker 서비스로부터의 접근 허용
+  - from:
+    - podSelector:
+        matchLabels:
+          app: worker
+    ports:
+    - protocol: TCP
+      port: 6379
+  egress:
+  # DNS 해결을 위한 kube-system 접근
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-network-policy
+  namespace: voting-app
+  annotations:
+    sysdig.com/policy-zone: "voting-app-zone"
+spec:
+  podSelector:
+    matchLabels:
+      app: db
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Worker 서비스로부터의 접근 허용
+  - from:
+    - podSelector:
+        matchLabels:
+          app: worker
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Result 서비스로부터의 접근 허용
+  - from:
+    - podSelector:
+        matchLabels:
+          app: result
+    ports:
+    - protocol: TCP
+      port: 5432
+  egress:
+  # DNS 해결을 위한 kube-system 접근
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+# 기본 거부 정책 (명시적으로 허용되지 않은 모든 트래픽 차단)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: voting-app
+  annotations:
+    sysdig.com/policy-zone: "voting-app-zone"
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
