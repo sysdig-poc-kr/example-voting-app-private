@@ -25,6 +25,7 @@ jobs:
         with:
           sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
           sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
+          cli-scanner-version: 1.22.5
           mode: iac
           iac-scan-path: ./k8s-specifications
           recursive: true
@@ -32,8 +33,27 @@ jobs:
           stop-on-failed-policy-eval: false
           stop-on-processing-error: false
 
+      - name: Debug - List all files after IaC scan
+        run: |
+          echo "=== Current directory contents ==="
+          ls -la
+          echo "=== Looking for any result files ==="
+          find . -name "*.json" -o -name "*.sarif" -o -name "*.log" 2>/dev/null || echo "No result files found"
+
+      # IaC 모드에서는 SARIF 파일이 생성되지 않을 수 있으므로 조건부 업로드
+      - name: Check for SARIF file
+        id: check-sarif
+        run: |
+          if [ -f "sarif.json" ]; then
+            echo "sarif-exists=true" >> $GITHUB_OUTPUT
+            echo "SARIF file found"
+          else
+            echo "sarif-exists=false" >> $GITHUB_OUTPUT
+            echo "SARIF file not found - IaC mode may not generate SARIF"
+          fi
+
       - name: Upload SARIF Report to GitHub Security
-        if: success() || failure()
+        if: steps.check-sarif.outputs.sarif-exists == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ github.workspace }}/sarif.json
@@ -46,6 +66,8 @@ jobs:
           path: |
             sarif.json
             scan-result.json
+            *.json
+            *.log
           if-no-files-found: warn
 
   # Vote 서비스 컨테이너 이미지 보안 스캔
