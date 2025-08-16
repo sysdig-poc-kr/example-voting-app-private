@@ -1,136 +1,150 @@
-# Example Voting App with Sysdig Security Integration
+# 🗳️ Voting App with Sysdig Security Integration
 
-A simple distributed application running across multiple Docker containers with integrated **Sysdig v6 security scanning**.
+**Sysdig v6 보안 통합이 적용된 마이크로서비스 아키텍처 데모 애플리케이션**
 
-## 🔒 Security Features
+Amazon EKS 배포를 위한 완전한 DevSecOps 파이프라인이 구현된 투표 애플리케이션입니다.
 
-This repository includes a complete **DevSecOps pipeline** with:
-- **Container Image Scanning**: Vulnerability assessment for all microservices
-- **Infrastructure as Code (IaC) Scanning**: Kubernetes manifest security validation
-- **GitHub Security Integration**: Automated SARIF report uploads
-- **Continuous Security Monitoring**: Scan results in GitHub Security tab
+![Security Pipeline Architecture](security-pipeline-architecture.png)
 
-### Security Scan Coverage
-| Service | Technology | Risk Level | Scan Focus |
-|---------|------------|------------|------------|
-| Vote | Python Flask | Medium | Python packages, OS vulnerabilities |
-| Worker | .NET Core | Low | .NET dependencies, runtime security |
-| Result | Node.js | **High** | npm packages, JavaScript vulnerabilities |
-| IaC | Kubernetes | Critical | Security contexts, network policies |
+## 🏗️ 아키텍처 개요
 
-## 🚀 Getting Started
+### 마이크로서비스 구성
+- **Vote**: Python Flask 기반 투표 인터페이스
+- **Worker**: .NET Core 기반 투표 처리 서비스  
+- **Result**: Node.js 기반 실시간 결과 표시
+- **Redis**: 인메모리 데이터 저장소 (투표 수집)
+- **PostgreSQL**: 영구 데이터 저장소 (투표 결과)
 
-### Prerequisites
-- [Docker Desktop](https://www.docker.com/products/docker-desktop)
-- [Docker Compose](https://docs.docker.com/compose) (auto-installed with Docker Desktop)
+### 보안 통합 시스템
+- **컨테이너 이미지 스캔**: 각 마이크로서비스별 취약점 검사
+- **IaC 보안 검증**: Kubernetes 매니페스트 보안 설정 검증
+- **GitHub Security 연동**: SARIF 기반 취약점 시각화
+- **Sysdig 통합**: 종합적인 보안 분석 및 정책 관리
 
-### Quick Start
-```shell
-# Clone and run the application
-git clone <repository-url>
-cd example-voting-app
-docker compose up
+## 🔐 보안 파이프라인
+
+### 자동화된 보안 검사
+매 커밋과 Pull Request마다 다음 보안 검사가 자동 실행됩니다:
+
+| 검사 유형 | 대상 | 결과 확인 위치 | 목적 |
+|-----------|------|----------------|------|
+| **IaC 스캔** | `k8s-specifications/` | Sysdig Console | EKS 배포 보안 설정 검증 |
+| **Vote 스캔** | Python Flask 이미지 | GitHub Security + Sysdig | Python 패키지 취약점 |
+| **Worker 스캔** | .NET Core 이미지 | GitHub Security + Sysdig | .NET 런타임 취약점 |
+| **Result 스캔** | Node.js 이미지 | GitHub Security + Sysdig | npm 패키지 취약점 |
+
+### 보안 결과 확인
+- **GitHub Security 탭**: 컨테이너 이미지 취약점 (SARIF 형식)
+- **Sysdig Secure Console**: 종합 보안 분석 및 IaC 정책 검증
+- **Pull Request**: 자동 보안 검사 결과 표시
+
+## 🚀 EKS 배포 가이드
+
+### 사전 요구사항
+```bash
+# AWS CLI 설정
+aws configure
+
+# kubectl 설치 및 EKS 클러스터 연결
+aws eks update-kubeconfig --region <region> --name <cluster-name>
+
+# 필요한 도구들
+kubectl version --client
+helm version
 ```
 
-**Access the application:**
-- Vote interface: [http://localhost:8080](http://localhost:8080)
-- Results interface: [http://localhost:8081](http://localhost:8081)
+### 1단계: EKS 클러스터 배포
+```bash
+# Kubernetes 매니페스트 배포
+kubectl apply -f k8s-specifications/
 
-## 🏗️ Architecture
-
-![Architecture diagram](architecture.excalidraw.png)
-
-### Components
-- **Vote**: Python Flask web app for voting between two options
-- **Redis**: In-memory data store for vote collection
-- **Worker**: .NET Core service for vote processing
-- **PostgreSQL**: Database for vote storage with Docker volume
-- **Result**: Node.js web app for real-time results display
-
-## 🔐 Security Pipeline
-
-### Automated Security Scanning
-The repository includes GitHub Actions workflows that automatically:
-
-1. **Scan container images** for vulnerabilities on every push
-2. **Validate Kubernetes manifests** for security misconfigurations
-3. **Upload results** to GitHub Security tab
-4. **Generate SARIF reports** for detailed analysis
-
-### Security Results
-- **GitHub Security Tab**: View all security findings
-- **Pull Request Checks**: Automatic security validation
-- **Artifacts**: Downloadable detailed scan reports
-
-### Configuration
-Security scanning requires these GitHub Secrets:
-```
-SYSDIG_SECURE_API_TOKEN: Your Sysdig API token
-SYSDIG_SECURE_ENDPOINT: Your Sysdig endpoint URL
+# 배포 상태 확인
+kubectl get pods -o wide
+kubectl get services
 ```
 
-## 📋 Deployment Options
+### 2단계: 서비스 접근
+```bash
+# Vote 서비스 (포트 31000)
+kubectl port-forward service/vote 8080:80
 
-### Docker Swarm
-```shell
-# Initialize swarm (if needed)
-docker swarm init
-
-# Deploy the stack
-docker stack deploy --compose-file docker-stack.yml vote
+# Result 서비스 (포트 31001)  
+kubectl port-forward service/result 8081:80
 ```
 
-### Kubernetes
-```shell
-# Deploy all services
-kubectl create -f k8s-specifications/
-
-# Access services
-# Vote: http://localhost:31000
-# Result: http://localhost:31001
-
-# Clean up
-kubectl delete -f k8s-specifications/
+### 3단계: 로드밸런서 설정 (선택사항)
+```bash
+# AWS Load Balancer Controller 설치
+helm repo add eks https://aws.github.io/eks-charts
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=<cluster-name>
 ```
 
-## 📚 Documentation
+## 🛡️ 보안 설정
 
-- **[Security Integration Guide (Korean)](docs/sysdig-integration-guide-ko.md)**: Complete Sysdig v6 integration documentation
-- **[Security Configurations](security/)**: Runtime policies, compliance configs, and security contexts
+### GitHub Secrets 구성
+다음 시크릿을 GitHub 저장소에 설정해야 합니다:
 
-## 🛡️ Security Best Practices Implemented
+```bash
+SYSDIG_SECURE_API_TOKEN=<your-sysdig-api-token>
+SYSDIG_SECURE_ENDPOINT=<your-sysdig-endpoint>
+```
 
-### Container Security
-- Non-root user execution
-- Read-only root filesystems
-- Security contexts with minimal privileges
-- Resource limits and requests
+### 보안 기능 활성화
+1. **자동 스캔**: 코드 push 시 자동 실행
+2. **PR 검증**: Pull Request 생성 시 보안 검사
+3. **취약점 알림**: GitHub Security 탭에서 실시간 모니터링
 
-### Network Security
-- Network policies for service isolation
-- Encrypted inter-service communication
-- Minimal port exposure
+## 📊 보안 분석 결과
 
-### Infrastructure Security
-- IaC security validation
-- Compliance policy enforcement
-- Continuous security monitoring
+### 위험도 평가 (예상)
+| 서비스 | 기술 스택 | 위험도 | 주요 관심사항 |
+|--------|-----------|--------|---------------|
+| **Result** | Node.js | 🔴 높음 | npm 패키지 취약점 다수 |
+| **Vote** | Python | 🟡 중간 | Python 의존성 관리 필요 |
+| **Worker** | .NET Core | 🟢 낮음 | 안정적인 런타임 환경 |
 
-## 🔍 Security Findings Summary
+### EKS 보안 모범 사례 적용
+- ✅ **보안 컨텍스트**: 비특권 사용자 실행
+- ✅ **네트워크 정책**: 서비스 간 통신 제한
+- ✅ **리소스 제한**: CPU/메모리 제한 설정
+- ✅ **시크릿 관리**: Kubernetes Secrets 활용
 
-Based on integrated Sysdig scanning:
-- **Result Service**: Highest risk due to npm package vulnerabilities
-- **Vote Service**: Medium risk with Python dependency concerns
-- **Worker Service**: Lowest risk with .NET Core security
-- **Infrastructure**: Secure with proper Kubernetes configurations
+## 🔍 모니터링 및 관찰성
 
-## 📈 Monitoring & Alerts
+### 실시간 모니터링
+- **Sysdig Monitor**: 컨테이너 성능 및 보안 메트릭
+- **Kubernetes Dashboard**: 클러스터 상태 모니터링
+- **AWS CloudWatch**: EKS 클러스터 로그 및 메트릭
 
-- **Real-time scanning**: Every commit triggers security analysis
-- **Trend analysis**: Security posture tracking over time
-- **Automated alerts**: Immediate notification of critical vulnerabilities
-- **Compliance reporting**: Regular security status reports
+### 보안 이벤트 추적
+- **취약점 트렌드**: 시간별 보안 상태 변화
+- **정책 위반**: 실시간 보안 정책 위반 감지
+- **컴플라이언스**: 보안 표준 준수 상태
+
+## 📚 추가 문서
+
+- **[Sysdig 통합 가이드 (한국어)](docs/sysdig-integration-guide-ko.md)**: 상세한 보안 통합 문서
+- **[보안 설정](security/)**: 런타임 정책 및 컴플라이언스 설정
+- **[EKS 배포 가이드](k8s-specifications/)**: Kubernetes 매니페스트 상세 설명
+
+## 🎯 면접 및 데모 포인트
+
+### 기술적 역량 시연
+1. **DevSecOps 파이프라인**: 자동화된 보안 통합
+2. **마이크로서비스 아키텍처**: EKS 기반 컨테이너 오케스트레이션
+3. **보안 모범 사례**: Sysdig를 활용한 종합 보안 관리
+4. **클라우드 네이티브**: AWS EKS 및 관련 서비스 활용
+
+### 실무 적용 사례
+- **컨테이너 보안**: 이미지 취약점 스캔 및 관리
+- **인프라 보안**: IaC 기반 보안 설정 검증
+- **운영 보안**: 실시간 모니터링 및 알림 시스템
+- **컴플라이언스**: 보안 정책 및 표준 준수
 
 ---
 
-**Note**: This is a demonstration application showcasing various technologies and security integration patterns. The security implementation follows Sysdig v6 best practices and is suitable for production reference.
+**🚀 이 프로젝트는 실제 프로덕션 환경에서 사용할 수 있는 보안 모범 사례를 구현한 데모 애플리케이션입니다.**
+
+**📧 문의사항이나 개선 제안이 있으시면 언제든 연락주세요!**

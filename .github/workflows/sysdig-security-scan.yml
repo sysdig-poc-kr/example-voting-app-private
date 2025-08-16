@@ -33,34 +33,6 @@ jobs:
           stop-on-failed-policy-eval: false
           stop-on-processing-error: false
 
-      - name: Collect IaC Scan Results
-        run: |
-          echo "=== IaC Scan Results Summary ==="
-          echo "📁 Scanned Path: ./k8s-specifications"
-          echo "🔍 Scan Mode: Infrastructure as Code (IaC)"
-          echo "⚠️  Minimum Severity: Medium"
-          echo ""
-          echo "=== Generated Files ==="
-          ls -la
-          echo ""
-          echo "=== Looking for result files ==="
-          find . -name "*.json" -o -name "*.log" -o -name "*.txt" 2>/dev/null || echo "No additional result files found"
-          echo ""
-          echo "ℹ️  Note: IaC scans focus on configuration compliance rather than vulnerabilities"
-          echo "📊 Results are primarily available in Sysdig Secure console"
-
-      - name: Archive IaC Scan Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: iac-scan-results
-          path: |
-            scan-result.json
-            *.json
-            *.log
-            *.txt
-          if-no-files-found: warn
-
       - name: IaC Scan Summary
         if: always()
         run: |
@@ -73,10 +45,10 @@ jobs:
           echo "- 🔄 **Recursive**: Yes" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Results Location:**" >> $GITHUB_STEP_SUMMARY
-          echo "- 🌐 **Sysdig Secure Console**: Detailed policy compliance results" >> $GITHUB_STEP_SUMMARY
-          echo "- 📦 **GitHub Artifacts**: Raw scan data (if available)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌐 **Sysdig Secure Console**: Complete policy compliance and configuration analysis" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 **Scan Focus**: Kubernetes security contexts, network policies, resource limits" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "ℹ️ **Note**: IaC scans validate Kubernetes security configurations and compliance policies. Unlike container image scans, they don't generate SARIF reports for GitHub Security tab." >> $GITHUB_STEP_SUMMARY
+          echo "ℹ️ **Note**: IaC scans validate EKS deployment security configurations. Results are optimized for Sysdig Secure console analysis." >> $GITHUB_STEP_SUMMARY
 
   # Vote 서비스 컨테이너 이미지 보안 스캔
   # Python Flask 애플리케이션의 취약점 검사
