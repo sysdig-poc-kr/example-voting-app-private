@@ -1,4 +1,4 @@
-name: Sysdig Security Scan (Official Style)
+name: Sysdig Security Scan
 
 on:
   push:
@@ -10,15 +10,16 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  # IaC 보안 스캔
+  # Infrastructure as Code (IaC) 보안 스캔
+  # Kubernetes 매니페스트 파일들의 보안 설정을 검증
   iac-scan:
-    name: Sysdig IaC Security Scan
+    name: IaC Security Scan
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Run Sysdig IaC Scan
+      - name: Sysdig IaC Security Scan
         id: iac-scan
         uses: sysdiglabs/scan-action@v6
         with:
@@ -31,40 +32,40 @@ jobs:
           stop-on-failed-policy-eval: false
           stop-on-processing-error: false
 
-      - name: Upload IaC SARIF to GitHub
+      - name: Upload SARIF Report to GitHub Security
         if: success() || failure()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ github.workspace }}/sarif.json
 
-      - name: Upload IaC Scan Results
+      - name: Archive Scan Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sysdig-iac-results
+          name: iac-scan-results
           path: |
             sarif.json
             scan-result.json
           if-no-files-found: warn
 
-  # Vote 서비스 빌드 및 스캔
-  vote-build-scan:
-    name: Vote Service - Build and Scan
+  # Vote 서비스 컨테이너 이미지 보안 스캔
+  # Python Flask 애플리케이션의 취약점 검사
+  vote-security-scan:
+    name: Vote Service Security Scan
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image locally
+      - name: Build Vote Service Image
         run: |
-          echo "Building vote image..."
           docker build -t vote-local:${{ github.sha }} ./vote --target final
-          docker images | grep vote-local
+          docker images vote-local:${{ github.sha }}
 
-      - name: Scan Vote Image
+      - name: Sysdig Container Image Scan
         id: scan
         uses: sysdiglabs/scan-action@v6
         with:
@@ -76,40 +77,40 @@ jobs:
           stop-on-failed-policy-eval: false
           stop-on-processing-error: false
 
-      - name: Upload Vote SARIF to GitHub
+      - name: Upload SARIF Report to GitHub Security
         if: success() || failure()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ github.workspace }}/sarif.json
 
-      - name: Upload Vote Scan Results
+      - name: Archive Scan Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sysdig-vote-results
+          name: vote-scan-results
           path: |
             sarif.json
             scan-result.json
           if-no-files-found: warn
 
-  # Worker 서비스 빌드 및 스캔
-  worker-build-scan:
-    name: Worker Service - Build and Scan
+  # Worker 서비스 컨테이너 이미지 보안 스캔
+  # .NET Core 애플리케이션의 취약점 검사
+  worker-security-scan:
+    name: Worker Service Security Scan
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image locally
+      - name: Build Worker Service Image
         run: |
-          echo "Building worker image..."
           docker build -t worker-local:${{ github.sha }} ./worker
-          docker images | grep worker-local
+          docker images worker-local:${{ github.sha }}
 
-      - name: Scan Worker Image
+      - name: Sysdig Container Image Scan
         id: scan
         uses: sysdiglabs/scan-action@v6
         with:
@@ -121,40 +122,40 @@ jobs:
           stop-on-failed-policy-eval: false
           stop-on-processing-error: false
 
-      - name: Upload Worker SARIF to GitHub
+      - name: Upload SARIF Report to GitHub Security
         if: success() || failure()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ github.workspace }}/sarif.json
 
-      - name: Upload Worker Scan Results
+      - name: Archive Scan Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sysdig-worker-results
+          name: worker-scan-results
           path: |
             sarif.json
             scan-result.json
           if-no-files-found: warn
 
-  # Result 서비스 빌드 및 스캔
-  result-build-scan:
-    name: Result Service - Build and Scan
+  # Result 서비스 컨테이너 이미지 보안 스캔
+  # Node.js 애플리케이션의 취약점 검사 (높은 위험도 예상)
+  result-security-scan:
+    name: Result Service Security Scan
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image locally
+      - name: Build Result Service Image
         run: |
-          echo "Building result image..."
           docker build -t result-local:${{ github.sha }} ./result
-          docker images | grep result-local
+          docker images result-local:${{ github.sha }}
 
-      - name: Scan Result Image
+      - name: Sysdig Container Image Scan
         id: scan
         uses: sysdiglabs/scan-action@v6
         with:
@@ -166,17 +167,17 @@ jobs:
           stop-on-failed-policy-eval: false
           stop-on-processing-error: false
 
-      - name: Upload Result SARIF to GitHub
+      - name: Upload SARIF Report to GitHub Security
         if: success() || failure()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ github.workspace }}/sarif.json
 
-      - name: Upload Result Scan Results
+      - name: Archive Scan Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sysdig-result-results
+          name: result-scan-results
           path: |
             sarif.json
             scan-result.json
