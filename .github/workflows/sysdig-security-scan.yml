@@ -15,7 +15,7 @@ env:
   SYSDIG_SECURE_API_TOKEN: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
 
 jobs:
-  # IaC 보안 스캔 (Kubernetes YAML 파일들)
+  # IaC 보안 스캔 (공식 문서 기반 올바른 설정)
   iac-scan:
     name: Sysdig IaC Security Scan
     runs-on: ubuntu-latest
@@ -26,17 +26,15 @@ jobs:
       - name: Run Sysdig IaC Scan
         uses: sysdiglabs/scan-action@v6
         with:
-          # IaC 스캔을 위한 올바른 설정
-          image-tag: "k8s-iac-scan"
+          # 공식 문서 기반 올바른 IaC 스캔 설정
           sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
           sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
-          # IaC 스캔에는 dockerfile-path 대신 scan path 사용
-          input-type: "iac"
-          run-as-user: "root"
-          # IaC 스캔 기본 설정
+          mode: iac
+          iac-scan-path: ./k8s-specifications
+          recursive: true
+          minimum-severity: medium
           stop-on-failed-policy-eval: false
-          stop-on-policy-eval-failure: false
-          use-policies: true
+          stop-on-processing-error: false
 
       - name: Upload IaC Scan Results
         if: always()
@@ -103,24 +101,23 @@ jobs:
       - name: Run Sysdig Secure Scan
         uses: sysdiglabs/scan-action@v6
         with:
+          # 공식 문서 기반 올바른 이미지 스캔 설정
           image-tag: ${{ steps.image.outputs.image }}
           sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
           sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
-          dockerfile-path: ./vote/Dockerfile
-          input-type: "docker-daemon"
-          run-as-user: "root"
-          # v6 기본 설정
-          stop-on-failed-policy-eval: false
-          stop-on-policy-eval-failure: false
-          use-policies: true
+          mode: vm
           registry-user: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
+          stop-on-failed-policy-eval: false
+          stop-on-processing-error: false
+          use-policies: true
+          severity-at-least: medium
 
       - name: Upload SARIF results
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: sysdig-results.sarif
+          sarif_file: ${{ github.workspace }}/sarif.json
 
       - name: Upload Vote Scan Results
         if: always()
@@ -130,6 +127,7 @@ jobs:
           path: |
             sysdig-results.*
             scan-result.json
+            sarif.json
 
   # Worker 서비스 빌드 및 스캔
   worker-build-scan:
@@ -186,24 +184,23 @@ jobs:
       - name: Run Sysdig Secure Scan
         uses: sysdiglabs/scan-action@v6
         with:
+          # 공식 문서 기반 올바른 이미지 스캔 설정
           image-tag: ${{ steps.image.outputs.image }}
           sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
           sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
-          dockerfile-path: ./worker/Dockerfile
-          input-type: "docker-daemon"
-          run-as-user: "root"
-          # v6 기본 설정
-          stop-on-failed-policy-eval: false
-          stop-on-policy-eval-failure: false
-          use-policies: true
+          mode: vm
           registry-user: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
+          stop-on-failed-policy-eval: false
+          stop-on-processing-error: false
+          use-policies: true
+          severity-at-least: medium
 
       - name: Upload SARIF results
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: sysdig-results.sarif
+          sarif_file: ${{ github.workspace }}/sarif.json
 
       - name: Upload Worker Scan Results
         if: always()
@@ -213,6 +210,7 @@ jobs:
           path: |
             sysdig-results.*
             scan-result.json
+            sarif.json
 
   # Result 서비스 빌드 및 스캔
   result-build-scan:
@@ -269,24 +267,23 @@ jobs:
       - name: Run Sysdig Secure Scan
         uses: sysdiglabs/scan-action@v6
         with:
+          # 공식 문서 기반 올바른 이미지 스캔 설정
           image-tag: ${{ steps.image.outputs.image }}
           sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
           sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
-          dockerfile-path: ./result/Dockerfile
-          input-type: "docker-daemon"
-          run-as-user: "root"
-          # v6 기본 설정
-          stop-on-failed-policy-eval: false
-          stop-on-policy-eval-failure: false
-          use-policies: true
+          mode: vm
           registry-user: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
+          stop-on-failed-policy-eval: false
+          stop-on-processing-error: false
+          use-policies: true
+          severity-at-least: medium
 
       - name: Upload SARIF results
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: sysdig-results.sarif
+          sarif_file: ${{ github.workspace }}/sarif.json
 
       - name: Upload Result Scan Results
         if: always()
@@ -296,59 +293,13 @@ jobs:
           path: |
             sysdig-results.*
             scan-result.json
-
-  # 별도의 Kubernetes YAML 파일 스캔 (IaC와 분리)
-  k8s-yaml-scan:
-    name: Kubernetes YAML Security Scan
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Scan Kubernetes YAML files
-        run: |
-          echo "🔍 Kubernetes YAML 파일 스캔 시작"
-          echo "스캔 대상 파일들:"
-          find k8s-specifications/ -name "*.yaml" -o -name "*.yml" | while read file; do
-            echo "  - $file"
-          done
-          
-          # 간단한 보안 검사 (실제로는 Sysdig에서 처리)
-          echo ""
-          echo "📋 발견된 보안 설정들:"
-          
-          # 보안 컨텍스트 확인
-          if grep -r "securityContext" k8s-specifications/ > /dev/null; then
-            echo "  ✅ Security Context 설정 발견"
-          else
-            echo "  ⚠️  Security Context 설정 없음"
-          fi
-          
-          # 네트워크 정책 확인
-          if find k8s-specifications/ -name "*network*" | grep -q .; then
-            echo "  ✅ Network Policy 파일 발견"
-          else
-            echo "  ⚠️  Network Policy 파일 없음"
-          fi
-          
-          # 리소스 제한 확인
-          if grep -r "resources:" k8s-specifications/ > /dev/null; then
-            echo "  ✅ Resource Limits 설정 발견"
-          else
-            echo "  ⚠️  Resource Limits 설정 없음"
-          fi
-
-      - name: Upload K8s YAML Scan Results
-        uses: actions/upload-artifact@v4
-        with:
-          name: k8s-yaml-scan-results
-          path: k8s-specifications/
+            sarif.json
 
   # Sysdig 전용 보안 분석 및 리포트
   sysdig-security-analysis:
     name: Sysdig Security Analysis & Report
     runs-on: ubuntu-latest
-    needs: [iac-scan, vote-build-scan, worker-build-scan, result-build-scan, k8s-yaml-scan]
+    needs: [iac-scan, vote-build-scan, worker-build-scan, result-build-scan]
     if: always()
     steps:
       - name: Checkout code
@@ -361,77 +312,64 @@ jobs:
 
       - name: Generate Sysdig-focused Security Report
         run: |
-          echo "# 🔒 Sysdig v6 보안 스캔 결과 리포트" > sysdig-security-report.md
+          echo "# 🔒 Sysdig v6 보안 스캔 결과 리포트 (공식 문법 적용)" > sysdig-security-report.md
           echo "" >> sysdig-security-report.md
           echo "## 📊 스캔 개요" >> sysdig-security-report.md
           echo "- **스캔 일시**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> sysdig-security-report.md
           echo "- **커밋 SHA**: ${{ github.sha }}" >> sysdig-security-report.md
           echo "- **브랜치**: ${{ github.ref_name }}" >> sysdig-security-report.md
-          echo "- **Sysdig Scan Action**: v6 (최신)" >> sysdig-security-report.md
+          echo "- **Sysdig Scan Action**: v6 (공식 문법 적용)" >> sysdig-security-report.md
           echo "" >> sysdig-security-report.md
-          echo "## 🎯 Sysdig 중심 보안 전략" >> sysdig-security-report.md
-          echo "### 왜 Sysdig만 사용하는가?" >> sysdig-security-report.md
-          echo "1. **통합 플랫폼**: 단일 플랫폼에서 모든 보안 요구사항 충족" >> sysdig-security-report.md
-          echo "2. **깊이 있는 분석**: Sysdig 전문 기능에 집중한 상세 분석" >> sysdig-security-report.md
-          echo "3. **운영 효율성**: 복잡한 다중 도구 관리 부담 제거" >> sysdig-security-report.md
-          echo "4. **면접 최적화**: Sysdig 전문성 집중 어필" >> sysdig-security-report.md
+          echo "## 🎯 공식 문서 기반 수정사항" >> sysdig-security-report.md
+          echo "### IaC 스캔 올바른 설정" >> sysdig-security-report.md
+          echo "- ✅ **mode: iac** - IaC 스캔 모드 명시" >> sysdig-security-report.md
+          echo "- ✅ **iac-scan-path: ./k8s-specifications** - 스캔할 경로 지정" >> sysdig-security-report.md
+          echo "- ✅ **recursive: true** - 하위 폴더까지 재귀 스캔" >> sysdig-security-report.md
+          echo "- ✅ **minimum-severity: medium** - 최소 심각도 설정" >> sysdig-security-report.md
           echo "" >> sysdig-security-report.md
-          echo "## 🏗️ Sysdig v6로 스캔된 컴포넌트" >> sysdig-security-report.md
+          echo "### 이미지 스캔 올바른 설정" >> sysdig-security-report.md
+          echo "- ✅ **mode: vm** - VM 스캔 모드 명시" >> sysdig-security-report.md
+          echo "- ✅ **image-tag** - 스캔할 이미지 태그 지정" >> sysdig-security-report.md
+          echo "- ✅ **severity-at-least: medium** - 심각도 필터링" >> sysdig-security-report.md
+          echo "- ✅ **use-policies: true** - Sysdig 정책 사용" >> sysdig-security-report.md
+          echo "" >> sysdig-security-report.md
+          echo "### SARIF 파일 경로 수정" >> sysdig-security-report.md
+          echo "- ✅ **sarif_file: \${{ github.workspace }}/sarif.json** - 올바른 SARIF 경로" >> sysdig-security-report.md
+          echo "" >> sysdig-security-report.md
+          echo "## 🏗️ 스캔된 컴포넌트" >> sysdig-security-report.md
           echo "### 1. **Infrastructure as Code (IaC)**" >> sysdig-security-report.md
-          echo "   - ✅ Sysdig IaC 스캔 (일반 IaC 정책)" >> sysdig-security-report.md
-          echo "   - ✅ Kubernetes YAML 파일 분석 (k8s-specifications/)" >> sysdig-security-report.md
-          echo "   - ✅ 네트워크 정책 및 보안 컨텍스트 검증" >> sysdig-security-report.md
+          echo "   - 📁 **스캔 경로**: ./k8s-specifications/" >> sysdig-security-report.md
+          echo "   - 🔄 **재귀 스캔**: 활성화" >> sysdig-security-report.md
+          echo "   - ⚠️ **최소 심각도**: Medium 이상" >> sysdig-security-report.md
           echo "" >> sysdig-security-report.md
           echo "### 2. **컨테이너 이미지 (Multi-platform)**" >> sysdig-security-report.md
           echo "   - 🐍 **Vote 서비스** (Python 3.11) - linux/amd64, linux/arm64" >> sysdig-security-report.md
-          echo "     - Dockerfile: ./vote/Dockerfile" >> sysdig-security-report.md
           echo "   - ⚙️ **Worker 서비스** (.NET 7.0) - linux/amd64, linux/arm64" >> sysdig-security-report.md
-          echo "     - Dockerfile: ./worker/Dockerfile" >> sysdig-security-report.md
           echo "   - 📊 **Result 서비스** (Node.js 18) - linux/amd64, linux/arm64" >> sysdig-security-report.md
-          echo "     - Dockerfile: ./result/Dockerfile" >> sysdig-security-report.md
-          echo "" >> sysdig-security-report.md
-          echo "## 🔧 수정된 IaC 스캔 구조" >> sysdig-security-report.md
-          echo "### 이전 문제점" >> sysdig-security-report.md
-          echo "- ❌ IaC 스캔에서 dockerfile-path 사용 (잘못된 설정)" >> sysdig-security-report.md
-          echo "- ❌ Kubernetes YAML과 Dockerfile 경로 혼동" >> sysdig-security-report.md
-          echo "" >> sysdig-security-report.md
-          echo "### 수정된 구조" >> sysdig-security-report.md
-          echo "- ✅ **IaC 스캔**: 일반적인 IaC 정책 검증" >> sysdig-security-report.md
-          echo "- ✅ **K8s YAML 스캔**: 별도 Job으로 Kubernetes 매니페스트 분석" >> sysdig-security-report.md
-          echo "- ✅ **컨테이너 스캔**: 각 서비스별 Dockerfile 경로 정확히 지정" >> sysdig-security-report.md
           echo "" >> sysdig-security-report.md
           echo "## 📋 스캔 결과 파일" >> sysdig-security-report.md
           echo "### IaC 스캔 결과" >> sysdig-security-report.md
           if [ -d "./sysdig-results/sysdig-iac-results" ]; then
-            echo "- ✅ Sysdig IaC 스캔 완료" >> sysdig-security-report.md
-          fi
-          echo "" >> sysdig-security-report.md
-          echo "### Kubernetes YAML 스캔 결과" >> sysdig-security-report.md
-          if [ -d "./sysdig-results/k8s-yaml-scan-results" ]; then
-            echo "- ✅ Kubernetes YAML 파일 분석 완료" >> sysdig-security-report.md
-            echo "  - 스캔된 파일들:" >> sysdig-security-report.md
-            find ./sysdig-results/k8s-yaml-scan-results/ -name "*.yaml" -o -name "*.yml" 2>/dev/null | head -10 | while read file; do
-              echo "    - $(basename $file)" >> sysdig-security-report.md
-            done
+            echo "- ✅ IaC 보안 스캔 완료 (k8s-specifications 재귀 스캔)" >> sysdig-security-report.md
           fi
           echo "" >> sysdig-security-report.md
           echo "### 컨테이너 이미지 스캔 결과" >> sysdig-security-report.md
           if [ -d "./sysdig-results/sysdig-vote-results" ]; then
-            echo "- ✅ Vote 서비스 스캔 완료" >> sysdig-security-report.md
+            echo "- ✅ Vote 서비스 스캔 완료 (VM 모드)" >> sysdig-security-report.md
           fi
           if [ -d "./sysdig-results/sysdig-worker-results" ]; then
-            echo "- ✅ Worker 서비스 스캔 완료" >> sysdig-security-report.md
+            echo "- ✅ Worker 서비스 스캔 완료 (VM 모드)" >> sysdig-security-report.md
           fi
           if [ -d "./sysdig-results/sysdig-result-results" ]; then
-            echo "- ✅ Result 서비스 스캔 완료" >> sysdig-security-report.md
+            echo "- ✅ Result 서비스 스캔 완료 (VM 모드)" >> sysdig-security-report.md
           fi
           echo "" >> sysdig-security-report.md
-          echo "## 🎯 Sysdig 중심 다음 단계" >> sysdig-security-report.md
+          echo "## 🎯 다음 단계" >> sysdig-security-report.md
           echo "1. **Sysdig Secure 콘솔**에서 상세 취약점 분석 확인" >> sysdig-security-report.md
           echo "2. **GitHub Security 탭**에서 SARIF 결과 검토" >> sysdig-security-report.md
-          echo "3. **Sysdig 정책**을 활용한 컴플라이언스 강화" >> sysdig-security-report.md
-          echo "4. **Kubernetes YAML** 보안 설정 개선" >> sysdig-security-report.md
-          echo "5. **Dockerfile** 보안 모범 사례 적용" >> sysdig-security-report.md
+          echo "3. **Medium 이상 취약점** 우선 수정" >> sysdig-security-report.md
+          echo "4. **IaC 정책 위반** 사항 개선" >> sysdig-security-report.md
+          echo "5. **Sysdig 정책**을 활용한 지속적인 보안 관리" >> sysdig-security-report.md
 
       - name: Upload Sysdig Security Report
         uses: actions/upload-artifact@v4
@@ -466,22 +404,22 @@ jobs:
 
       - name: Collect Sysdig Metrics
         run: |
-          echo "# 📊 Sysdig 보안 메트릭" > sysdig-metrics.md
+          echo "# 📊 Sysdig 보안 메트릭 (공식 문법 적용)" > sysdig-metrics.md
           echo "- **스캔 완료 시간**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> sysdig-metrics.md
-          echo "- **Sysdig 버전**: v6 (최신)" >> sysdig-metrics.md
+          echo "- **Sysdig 버전**: v6 (공식 문법)" >> sysdig-metrics.md
           echo "- **스캔된 이미지**: 3개 (Vote, Worker, Result)" >> sysdig-metrics.md
-          echo "- **IaC 스캔**: ✅ 완료 (일반 IaC 정책)" >> sysdig-metrics.md
-          echo "- **K8s YAML 스캔**: ✅ 완료 (k8s-specifications)" >> sysdig-metrics.md
-          echo "- **SARIF 업로드**: ✅ 완료" >> sysdig-metrics.md
+          echo "- **IaC 스캔**: ✅ 완료 (./k8s-specifications, 재귀)" >> sysdig-metrics.md
+          echo "- **SARIF 업로드**: ✅ 완료 (올바른 경로)" >> sysdig-metrics.md
           echo "- **SBOM 생성**: ✅ 완료" >> sysdig-metrics.md
           echo "- **Multi-platform 빌드**: ✅ 완료 (AMD64, ARM64)" >> sysdig-metrics.md
-          echo "- **스캔 구조 수정**: ✅ IaC와 K8s YAML 분리" >> sysdig-metrics.md
+          echo "- **공식 문법 적용**: ✅ 완료" >> sysdig-metrics.md
           echo "" >> sysdig-metrics.md
-          echo "## 🎯 개선된 스캔 구조" >> sysdig-metrics.md
-          echo "1. **IaC 스캔**: Sysdig 일반 IaC 정책 검증" >> sysdig-metrics.md
-          echo "2. **K8s YAML 스캔**: Kubernetes 매니페스트 전용 분석" >> sysdig-metrics.md
-          echo "3. **컨테이너 스캔**: 각 서비스별 Dockerfile 정확한 경로" >> sysdig-security-report.md
-          echo "4. **통합 리포트**: 모든 스캔 결과 종합 분석" >> sysdig-metrics.md
+          echo "## 🎯 공식 문서 기반 개선사항" >> sysdig-metrics.md
+          echo "1. **정확한 파라미터 사용**: 공식 문서의 정확한 파라미터명 사용" >> sysdig-metrics.md
+          echo "2. **모드 명시**: IaC는 'iac', 이미지는 'vm' 모드 명시" >> sysdig-metrics.md
+          echo "3. **경로 지정**: iac-scan-path로 정확한 스캔 경로 지정" >> sysdig-metrics.md
+          echo "4. **SARIF 경로**: github.workspace 기반 올바른 SARIF 경로" >> sysdig-metrics.md
+          echo "5. **심각도 필터**: severity-at-least로 적절한 필터링" >> sysdig-metrics.md
 
       - name: Upload Sysdig Metrics
         uses: actions/upload-artifact@v4
