@@ -51,7 +51,7 @@ jobs:
             echo "❌ Harbor Registry login failed" >> $GITHUB_STEP_SUMMARY
             echo "Please check HARBOR_USERNAME and HARBOR_PASSWORD secrets" >> $GITHUB_STEP_SUMMARY
             echo "Registry: ${{ env.HARBOR_REGISTRY }}" >> $GITHUB_STEP_SUMMARY
-            exit 1
+            echo "⚠️ Continuing with scan only (no push to Harbor)" >> $GITHUB_STEP_SUMMARY
           else
             echo "✅ Harbor Registry login successful" >> $GITHUB_STEP_SUMMARY
           fi
