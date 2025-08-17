@@ -39,9 +39,11 @@ jobs:
         with:
           images: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
+            type=ref,event=branch,suffix=-v2
+            type=ref,event=pr,suffix=-v2
+            type=raw,value=latest-v2,enable={{is_default_branch}}
             type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix={{branch}}-
 
       - name: Build for Scan
         run: docker build --platform linux/amd64 -t ${{ env.SERVICE }}-scan:${{ github.sha }} ./worker
