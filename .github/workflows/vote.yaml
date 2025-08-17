@@ -1,0 +1,85 @@
+name: Vote Service
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths: [ 'vote/**', '.github/workflows/vote.yaml' ]
+  pull_request:
+    branches: [ main ]
+    paths: [ 'vote/**', '.github/workflows/vote.yaml' ]
+
+env:
+  HARBOR_REGISTRY: hw-harbor.bluesunnywings.com
+  HARBOR_PROJECT: sysdig-poc
+  SERVICE: vote
+
+jobs:
+  build-scan-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+        
+      - name: Harbor Login
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.HARBOR_REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+          
+      - name: Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build for Scan
+        run: docker build --platform linux/amd64 --target final -t ${{ env.SERVICE }}-scan:${{ github.sha }} ./vote
+          
+      - name: Security Scan
+        uses: sysdiglabs/scan-action@v6
+        with:
+          image-tag: ${{ env.SERVICE }}-scan:${{ github.sha }}
+          sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
+          sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
+          mode: vm
+          severity-at-least: medium
+          stop-on-failed-policy-eval: false
+
+      - name: Push to Harbor
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./vote
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          target: final
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Upload SARIF
+        if: always() && hashFiles('sarif.json') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sarif.json
+
+      - name: Archive Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.SERVICE }}-scan-${{ github.sha }}
+          path: |
+            sarif.json
+            scan-result.json
+          if-no-files-found: ignore
