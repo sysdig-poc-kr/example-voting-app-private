@@ -36,11 +36,25 @@ jobs:
         
       - name: Log in to Harbor Registry
         if: github.event_name != 'pull_request'
+        id: harbor-login
+        continue-on-error: true
         uses: docker/login-action@v3
         with:
           registry: ${{ env.HARBOR_REGISTRY }}
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Check Harbor Login Status
+        if: github.event_name != 'pull_request'
+        run: |
+          if [ "${{ steps.harbor-login.outcome }}" = "failure" ]; then
+            echo "❌ Harbor Registry login failed" >> $GITHUB_STEP_SUMMARY
+            echo "Please check HARBOR_USERNAME and HARBOR_PASSWORD secrets" >> $GITHUB_STEP_SUMMARY
+            echo "Registry: ${{ env.HARBOR_REGISTRY }}" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "✅ Harbor Registry login successful" >> $GITHUB_STEP_SUMMARY
+          fi
           
       - name: Extract metadata
         id: meta
@@ -74,7 +88,7 @@ jobs:
 
       # Harbor Registry에 푸시 (스캔 성공 후)
       - name: Build and push to Harbor Registry
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && steps.harbor-login.outcome == 'success'
         uses: docker/build-push-action@v6
         with:
           context: ./result
@@ -88,7 +102,7 @@ jobs:
 
       # GitHub Security에 SARIF 업로드
       - name: Upload SARIF Report
-        if: success() || failure()
+        if: (success() || failure()) && hashFiles('sarif.json') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ github.workspace }}/sarif.json
@@ -102,7 +116,18 @@ jobs:
           path: |
             sarif.json
             scan-result.json
-          if-no-files-found: warn
+          if-no-files-found: ignore
+
+      # 스캔 실패 시 알림
+      - name: Scan Status Check
+        if: always()
+        run: |
+          if [ ! -f "sarif.json" ]; then
+            echo "⚠️ SARIF file not generated - scan may have failed" >> $GITHUB_STEP_SUMMARY
+            echo "Check Sysdig scan step for errors" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ SARIF file generated successfully" >> $GITHUB_STEP_SUMMARY
+          fi
 
       # PR 코멘트
       - name: Comment on PR
