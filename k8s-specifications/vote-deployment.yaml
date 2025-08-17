@@ -14,8 +14,10 @@ spec:
       labels:
         app: vote
     spec:
+      imagePullSecrets:
+      - name: harbor-registry-secret
       containers:
-      - image: dockersamples/examplevotingapp_vote
+      - image: hw-harbor.bluesunnywings.com/sysdig-poc/vote:latest
         name: vote
         ports:
         - containerPort: 80

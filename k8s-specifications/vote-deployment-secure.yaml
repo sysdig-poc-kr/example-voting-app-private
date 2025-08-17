@@ -46,9 +46,13 @@ spec:
       serviceAccountName: vote-service-account
       automountServiceAccountToken: false
       
+      # Harbor Registry 인증
+      imagePullSecrets:
+      - name: harbor-registry-secret
+      
       containers:
       - name: vote
-        image: ghcr.io/your-org/example-voting-app/vote:latest
+        image: hw-harbor.bluesunnywings.com/sysdig-poc/vote:latest
         imagePullPolicy: Always
         
         # 포트 설정

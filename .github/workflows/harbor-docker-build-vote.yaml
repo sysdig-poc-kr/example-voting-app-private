@@ -1,5 +1,5 @@
-name: Build Worker - Harbor Registry
-# Harbor Registry를 사용한 Worker 서비스 빌드 및 푸시
+name: Build Vote - Harbor Registry
+# Harbor Registry를 사용한 Vote 서비스 빌드 및 푸시
 
 on:
   push:
@@ -7,19 +7,19 @@ on:
       - 'main'
       - 'develop'
     paths:
-      - 'worker/**'
-      - '.github/workflows/call-docker-build-worker.yaml'
+      - 'vote/**'
+      - '.github/workflows/harbor-docker-build-vote.yaml'
   pull_request:
     branches:
       - 'main'
     paths:
-      - 'worker/**'
-      - '.github/workflows/call-docker-build-worker.yaml'
+      - 'vote/**'
+      - '.github/workflows/harbor-docker-build-vote.yaml'
 
 env:
   HARBOR_REGISTRY: hw-harbor.bluesunnywings.com
   HARBOR_PROJECT: sysdig-poc
-  IMAGE_NAME: worker
+  IMAGE_NAME: vote
 
 jobs:
   build-and-push:
@@ -58,8 +58,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./worker
-          file: ./worker/Dockerfile
+          context: ./vote
+          file: ./vote/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -72,20 +72,16 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const output = `#### ⚙️ Worker Service Docker Build
+            const output = `#### 🐳 Vote Service Docker Build
             
-            **Harbor Registry:** \`${{ env.HARBOR_REGISTRY }}\`
-            **Project:** \`${{ env.HARBOR_PROJECT }}\`
-            **Image:** \`${{ env.IMAGE_NAME }}\`
-            **Full Image Path:** \`${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}\`
-            
+            **Image:** \`${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}\`
             **Tags:** 
             \`\`\`
             ${{ steps.meta.outputs.tags }}
             \`\`\`
             
             **Status:** ✅ Build completed successfully (not pushed for PR)
-            **Context:** \`./worker\`
+            **Context:** \`./vote\`
             **Platforms:** \`linux/amd64,linux/arm64\`
             `;
             
