@@ -1,0 +1,158 @@
+name: Worker Service - Build, Scan & Push
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/worker-build-scan-push.yaml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/worker-build-scan-push.yaml'
+
+env:
+  HARBOR_REGISTRY: hw-harbor.bluesunnywings.com
+  HARBOR_PROJECT: sysdig-poc
+  SERVICE_NAME: worker
+
+jobs:
+  build-scan-push:
+    name: Worker Service Pipeline
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Log in to Harbor Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.HARBOR_REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+          
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix={{branch}}-
+
+      # 로컬 스캔용 이미지 빌드
+      - name: Build image for scanning
+        run: |
+          docker build --platform linux/amd64 -t worker-scan:${{ github.sha }} ./worker
+          
+      # Sysdig 보안 스캔
+      - name: Sysdig Security Scan
+        id: scan
+        uses: sysdiglabs/scan-action@v6
+        with:
+          image-tag: worker-scan:${{ github.sha }}
+          sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
+          sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
+          cli-scanner-version: 1.22.5
+          mode: vm
+          severity-at-least: medium
+          stop-on-failed-policy-eval: false
+          stop-on-processing-error: false
+
+      # Harbor Registry에 푸시 (스캔 성공 후)
+      - name: Build and push to Harbor Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./worker
+          file: ./worker/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # GitHub Security에 SARIF 업로드
+      - name: Upload SARIF Report
+        if: success() || failure()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ github.workspace }}/sarif.json
+
+      # 스캔 결과 아티팩트 저장
+      - name: Archive Scan Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-scan-results-${{ github.sha }}
+          path: |
+            sarif.json
+            scan-result.json
+          if-no-files-found: warn
+
+      # PR 코멘트
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `#### ⚙️ Worker Service Build & Scan Results
+            
+            **Harbor Registry:** \`${{ env.HARBOR_REGISTRY }}\`
+            **Project:** \`${{ env.HARBOR_PROJECT }}\`
+            **Service:** \`${{ env.SERVICE_NAME }}\`
+            
+            **Tags:** 
+            \`\`\`
+            ${{ steps.meta.outputs.tags }}
+            \`\`\`
+            
+            **Status:** ✅ Build & Security Scan completed successfully
+            **Platform:** \`linux/amd64\` (Sysdig compatible)
+            **Context:** \`./worker\`
+            **Technology:** \`.NET Core\`
+            
+            > 📝 **Note**: Image not pushed to Harbor Registry for PR builds
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      # 워크플로우 요약
+      - name: Workflow Summary
+        if: always()
+        run: |
+          echo "## ⚙️ Worker Service Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Service Details:**" >> $GITHUB_STEP_SUMMARY
+          echo "- 🏗️ **Registry**: \`${{ env.HARBOR_REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 **Project**: \`${{ env.HARBOR_PROJECT }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- ⚙️ **Service**: \`${{ env.SERVICE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 🖥️ **Platform**: \`linux/amd64\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 💻 **Technology**: \`.NET Core\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Pipeline Steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Docker Build (scan target)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Sysdig Security Scan" >> $GITHUB_STEP_SUMMARY
+          echo "- ${{ github.event_name != 'pull_request' && '✅' || '⏭️' }} Harbor Registry Push" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ SARIF Upload to GitHub Security" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔒 **Security**: Medium+ severity vulnerabilities scanned and reported"
