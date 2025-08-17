@@ -56,7 +56,7 @@ jobs:
           severity-at-least: medium
           stop-on-failed-policy-eval: false
 
-      - name: Push to Harbor
+      - name: Push to Harbor (Docker v2 Compatible)
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
@@ -67,6 +67,9 @@ jobs:
           target: final
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+          outputs: type=image,oci-mediatypes=false
 
       - name: Upload SARIF
         if: always() && hashFiles('sarif.json') != ''
