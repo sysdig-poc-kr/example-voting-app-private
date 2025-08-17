@@ -60,12 +60,13 @@ jobs:
         with:
           context: ./worker
           file: ./worker/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          outputs: type=image,name=${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }},push=${{ github.event_name != 'pull_request' }}
           
       - name: Comment PR with image info
         if: github.event_name == 'pull_request'
@@ -86,7 +87,8 @@ jobs:
             
             **Status:** ✅ Build completed successfully (not pushed for PR)
             **Context:** \`./worker\`
-            **Platforms:** \`linux/amd64,linux/arm64\`
+            **Platforms:** \`linux/amd64\` (Sysdig Scanner compatible)
+            **Note:** Single platform build to avoid OCI Index compatibility issues with Sysdig Registry Scanner
             `;
             
             github.rest.issues.createComment({

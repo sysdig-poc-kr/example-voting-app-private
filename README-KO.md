@@ -1,437 +1,195 @@
-# 🗳️ Example Voting App - Sysdig 보안 통합 버전 (v6 Enhanced)
+# 🗳️ Sysdig 보안 통합 투표 애플리케이션
 
-[![Sysdig Security](https://img.shields.io/badge/Sysdig-v6%20Enhanced-blue)](https://sysdig.com)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-Ready-green)](https://kubernetes.io)
-[![Docker](https://img.shields.io/badge/Docker-Multi--platform-blue)](https://docker.com)
-[![SLSA](https://img.shields.io/badge/SLSA-Level%203-orange)](https://slsa.dev)
-[![License](https://img.shields.io/badge/License-Apache%202.0-yellow.svg)](LICENSE)
+**엔터프라이즈급 마이크로서비스 애플리케이션과 통합 DevSecOps 파이프라인**
 
-Docker 컨테이너 여러 개에서 실행되는 간단한 분산 애플리케이션으로, **최신 Sysdig v6 및 다중 보안 도구가 완전히 통합**되어 있습니다.
+Sysdig v6 통합으로 현대적인 클라우드 네이티브 보안 관행을 시연하는 종합적인 투표 애플리케이션으로, Amazon EKS 배포를 위해 설계되었습니다.
 
-## 📋 목차
+## 🔄 보안 파이프라인 아키텍처
 
-- [🏗️ 아키텍처](#️-아키텍처)
-- [🚀 빠른 시작](#-빠른-시작)
-- [🔒 Sysdig v6 보안 통합](#-sysdig-v6-보안-통합)
-- [🛡️ 다중 보안 도구 스택](#️-다중-보안-도구-스택)
-- [📊 모니터링 및 컴플라이언스](#-모니터링-및-컴플라이언스)
-- [🔧 설정 및 배포](#-설정-및-배포)
-- [📈 보안 이벤트 시뮬레이션](#-보안-이벤트-시뮬레이션)
-- [📚 문서](#-문서)
-
-## 🏗️ 아키텍처
-
-![Architecture diagram](architecture.excalidraw.png)
-
-### 핵심 구성 요소
-
-- **🐍 Vote 서비스**: Python Flask 기반 투표 웹 애플리케이션
-- **⚙️ Worker 서비스**: .NET 기반 백그라운드 작업 처리기
-- **📊 Result 서비스**: Node.js 기반 실시간 결과 표시 웹 애플리케이션
-- **🗄️ Redis**: 메시지 큐 및 캐시
-- **🐘 PostgreSQL**: 영구 데이터 저장소
-
-### 🔒 최신 보안 레이어 (v6 Enhanced)
-
-- **Sysdig Scan Action v6**: 최신 컨테이너 보안 스캔
-- **Multi-platform 지원**: AMD64, ARM64 아키텍처
-- **SARIF 통합**: GitHub Security 탭 연동
-- **SBOM 자동 생성**: 소프트웨어 구성 요소 명세서
-- **공급망 보안**: Cosign 서명 + SLSA Provenance
-
-## 🚀 빠른 시작
-
-### 전제 조건
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop) (Mac/Windows)
-- [Docker Compose](https://docs.docker.com/compose) (Linux)
-- [kubectl](https://kubernetes.io/docs/tasks/tools/) (Kubernetes 배포용)
-- Sysdig Secure 계정 및 API 토큰
-- Snyk 토큰 (선택사항)
-
-### 1. 로컬 개발 환경
-
-```bash
-# 저장소 클론
-git clone https://github.com/your-org/example-voting-app.git
-cd example-voting-app
-
-# Docker Compose로 실행
-docker compose up
+```mermaid
+flowchart TD
+    A[GitHub Repository<br/>example-voting-app-private] --> B{CI/CD 트리거}
+    
+    B --> C[main/develop 브랜치 Push]
+    B --> D[Pull Request 생성]
+    
+    C --> E[보안 스캐닝 파이프라인]
+    D --> E
+    
+    E --> F[IaC 보안 스캔<br/>📋 Kubernetes 매니페스트]
+    E --> G[Vote 서비스 스캔<br/>🐍 Python Flask]
+    E --> H[Worker 서비스 스캔<br/>⚙️ .NET Core]
+    E --> I[Result 서비스 스캔<br/>📊 Node.js]
+    
+    F --> J[Sysdig Secure 콘솔<br/>📊 정책 준수<br/>🔍 IaC 분석]
+    
+    G --> K[GitHub Security 탭<br/>📋 SARIF 리포트<br/>🚨 취약점 알림]
+    H --> K
+    I --> K
+    
+    G --> L[GitHub Artifacts<br/>📦 상세 스캔 데이터<br/>📈 히스토리 결과]
+    H --> L
+    I --> L
+    
+    A --> M[Amazon EKS 배포<br/>🏗️ 마이크로서비스<br/>💾 데이터 레이어]
+    
+    style A fill:#e1f5fe
+    style E fill:#fff3e0
+    style J fill:#f3e5f5
+    style K fill:#e8f5e8
+    style L fill:#e8f5e8
+    style M fill:#fff8e1
 ```
 
-- 투표 앱: [http://localhost:8080](http://localhost:8080)
-- 결과 앱: [http://localhost:8081](http://localhost:8081)
+## 🏗️ 애플리케이션 아키텍처
 
-### 2. Kubernetes 배포
+### 마이크로서비스 구성요소
+- **Vote 서비스**: 투표를 위한 Python Flask 웹 인터페이스
+- **Worker 서비스**: 투표 처리를 위한 .NET Core 백그라운드 프로세서
+- **Result 서비스**: 실시간 결과 대시보드를 위한 Node.js
+- **Redis**: 투표 큐를 위한 인메모리 데이터 저장소
+- **PostgreSQL**: 투표 저장을 위한 영구 데이터베이스
 
+### 보안 통합 스택
+- **컨테이너 이미지 스캐닝**: 각 마이크로서비스의 취약점 평가
+- **Infrastructure as Code (IaC) 검증**: Kubernetes 매니페스트 보안 검증
+- **GitHub 보안 통합**: SARIF 기반 취약점 시각화
+- **Sysdig 플랫폼**: 종합적인 보안 분석 및 정책 관리
+
+## 🔐 DevSecOps 파이프라인
+
+### 자동화된 보안 검사
+모든 커밋과 풀 리퀘스트는 종합적인 보안 스캐닝을 트리거합니다:
+
+| 스캔 유형 | 대상 | 결과 위치 | 목적 |
+|-----------|------|-----------|------|
+| **IaC 스캔** | `k8s-specifications/` | Sysdig 콘솔 | EKS 배포 보안 검증 |
+| **Vote 스캔** | Python Flask 이미지 | GitHub Security + Sysdig | Python 패키지 취약점 |
+| **Worker 스캔** | .NET Core 이미지 | GitHub Security + Sysdig | .NET 런타임 취약점 |
+| **Result 스캔** | Node.js 이미지 | GitHub Security + Sysdig | npm 패키지 취약점 |
+
+### 보안 결과 대시보드
+- **GitHub Security 탭**: 컨테이너 이미지 취약점 (SARIF 형식)
+- **Sysdig Secure 콘솔**: 종합적인 보안 분석 및 IaC 정책 검증
+- **Pull Request 검사**: 자동화된 보안 검증 결과
+
+## 🚀 빠른 시작 가이드
+
+### 사전 요구사항
 ```bash
-# 네임스페이스 생성
-kubectl create namespace voting-app
+# AWS CLI 구성
+aws configure
 
-# 보안이 강화된 매니페스트 배포
+# kubectl 설치 및 EKS 클러스터 연결
+aws eks update-kubeconfig --region <region> --name <cluster-name>
+
+# 필요한 도구들
+kubectl version --client
+helm version
+```
+
+### 배포 단계
+
+#### 1. EKS 클러스터에 배포
+```bash
+# Kubernetes 매니페스트 적용
 kubectl apply -f k8s-specifications/
 
-# 네트워크 보안 정책 적용
-kubectl apply -f k8s-specifications/network-policies.yaml
+# 배포 상태 확인
+kubectl get pods -o wide
+kubectl get services
 ```
 
-## 🔒 Sysdig v6 보안 통합
+#### 2. 서비스 접근
+```bash
+# Vote 서비스 (포트 31000)
+kubectl port-forward service/vote 8080:80
 
-### 🎯 v6의 주요 새 기능
-
-#### 1. 향상된 컨테이너 이미지 보안 스캔
-
-```yaml
-# .github/workflows/sysdig-security-scan.yml
-- name: Run Sysdig Secure Scan
-  uses: sysdiglabs/scan-action@v6  # ⬆️ v5에서 v6로 업그레이드
-  with:
-    image-tag: ${{ steps.image.outputs.image }}
-    sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
-    sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
-    # 🆕 v6 새로운 기능들
-    stop-on-failed-policy-eval: false
-    stop-on-policy-eval-failure: false
-    use-policies: true
-    extra-parameters: "--format json --verbose"
-    registry-user: ${{ github.actor }}
-    registry-password: ${{ secrets.GITHUB_TOKEN }}
+# Result 서비스 (포트 31001)  
+kubectl port-forward service/result 8081:80
 ```
 
-#### 2. Multi-platform 빌드 지원
-
-```yaml
-- name: Build and push Docker image
-  uses: docker/build-push-action@v6  # ⬆️ v5에서 v6로 업그레이드
-  with:
-    # 🆕 새로운 기능들
-    provenance: true
-    sbom: true
-    platforms: linux/amd64,linux/arm64
+#### 3. 로드 밸런서 설정 (선택사항)
+```bash
+# AWS Load Balancer Controller 설치
+helm repo add eks https://aws.github.io/eks-charts
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=<cluster-name>
 ```
 
-#### 3. SARIF 결과 GitHub 통합
+## 🛡️ 보안 구성
 
-```yaml
-- name: Upload SARIF results
-  uses: github/codeql-action/upload-sarif@v3
-  with:
-    sarif_file: sysdig-results.sarif
-```
-
-**스캔 결과 분석**:
-- **Vote 서비스**: Python 3.11 기반, 중간 위험도
-- **Worker 서비스**: .NET 7.0 기반, 낮은 위험도  
-- **Result 서비스**: Node.js 18 기반, 높은 위험도 (npm 패키지 취약점)
-
-## 🛡️ 다중 보안 도구 스택
-
-### 🔧 통합된 보안 도구들
-
-#### 1. **Sysdig Scan Action v6** 🔒
-- 컨테이너 이미지 취약점 스캔
-- IaC 보안 검증
-- 정책 기반 평가
-- SARIF 결과 제공
-
-#### 2. **Trivy v0.24.0** 🔍
-- 파일시스템 취약점 스캔
-- 컨테이너 이미지 스캔
-- 다양한 출력 형식 지원
-
-#### 3. **Snyk v0.4.0** 🐍
-- 의존성 취약점 분석
-- Docker 이미지 스캔
-- 실시간 취약점 데이터베이스
-
-#### 4. **Grype (Anchore) v4** ⚓
-- 컨테이너 이미지 취약점 스캔
-- 다양한 패키지 매니저 지원
-- 심각도 기반 필터링
-
-#### 5. **Checkov v12** ✅
-- IaC 보안 정책 검증
-- Kubernetes, Dockerfile, Docker Compose 지원
-- 800+ 내장 정책 규칙
-
-#### 6. **Semgrep** 🔎
-- 정적 코드 분석
-- 보안 취약점 패턴 탐지
-- 다중 언어 지원
-
-#### 7. **Cosign v3.5.0** ✍️
-- 컨테이너 이미지 서명
-- Sigstore 기반 무키 서명
-- 공급망 보안 강화
-
-#### 8. **SLSA Provenance v2.0.0** 📋
-- 빌드 출처 증명
-- 공급망 무결성 검증
-- SLSA Level 3 준수
-
-### 📈 보안 커버리지 매트릭스
-
-| 보안 영역 | 도구 | 커버리지 | 상태 |
-|-----------|------|----------|------|
-| 컨테이너 이미지 | Sysdig, Trivy, Snyk, Grype | 100% | ✅ |
-| IaC 보안 | Sysdig, Checkov | 100% | ✅ |
-| 정적 분석 | Semgrep | 100% | ✅ |
-| 의존성 스캔 | Snyk, Trivy | 100% | ✅ |
-| 공급망 보안 | Cosign, SLSA | 100% | ✅ |
-
-## 📊 모니터링 및 컴플라이언스
-
-### 컴플라이언스 프레임워크
-
-#### CIS Kubernetes Benchmark
-- ✅ API 서버 보안 설정
-- ✅ etcd 보안 구성
-- ✅ 컨트롤 플레인 보안
-- ✅ 워커 노드 보안
-- ✅ RBAC 정책
-
-#### NIST Cybersecurity Framework
-- **식별(Identify)**: 자산 및 위험 관리
-- **보호(Protect)**: 접근 제어 및 데이터 보안
-- **탐지(Detect)**: 이상 징후 및 이벤트 모니터링
-- **대응(Respond)**: 사고 대응 계획
-- **복구(Recover)**: 복구 계획 및 개선
-
-### 📈 보안 메트릭
+### 필요한 GitHub Secrets
+GitHub 저장소에 다음 시크릿을 구성하세요:
 
 ```bash
-# 보안 대시보드 접근
-kubectl port-forward -n voting-app svc/sysdig-dashboard 3000:3000
+SYSDIG_SECURE_API_TOKEN=<your-sysdig-api-token>
+SYSDIG_SECURE_ENDPOINT=<your-sysdig-endpoint>
 ```
 
-**주요 지표**:
-- 취약점 수 및 심각도
-- 정책 위반 횟수
-- 컴플라이언스 점수
-- 보안 이벤트 발생률
-- SBOM 커버리지
-- 서명된 이미지 비율
+### 보안 기능
+- **자동화된 스캐닝**: 코드 푸시 및 PR 생성 시 트리거
+- **PR 보안 검증**: 풀 리퀘스트 워크플로우에 통합된 보안 검사
+- **실시간 모니터링**: GitHub Security 탭을 통한 지속적인 취약점 추적
 
-## 🔧 설정 및 배포
+## 📊 보안 분석 개요
 
-### 환경 변수 설정
+### 위험 평가 매트릭스
+| 서비스 | 기술 스택 | 위험 수준 | 주요 관심사항 |
+|---------|-----------|-----------|---------------|
+| **Result** | Node.js | 🔴 높음 | npm 패키지 취약점 |
+| **Vote** | Python Flask | 🟡 중간 | Python 의존성 관리 |
+| **Worker** | .NET Core | 🟢 낮음 | 안정적인 런타임 환경 |
 
-```bash
-# Sysdig 자격 증명 설정
-export SYSDIG_SECURE_API_TOKEN="your-api-token"
-export SYSDIG_SECURE_ENDPOINT="https://secure.sysdig.com"
+### EKS 보안 모범 사례 구현
+- ✅ **보안 컨텍스트**: 비특권 사용자 실행
+- ✅ **네트워크 정책**: 서비스 간 통신 제한
+- ✅ **리소스 제한**: CPU/메모리 제약 구성
+- ✅ **시크릿 관리**: Kubernetes Secrets 활용
 
-# Snyk 토큰 설정 (선택사항)
-export SNYK_TOKEN="your-snyk-token"
+## 🔍 모니터링 및 관찰성
 
-# Kubernetes 시크릿 생성
-kubectl create secret generic sysdig-credentials \
-  --from-literal=api-token=$SYSDIG_SECURE_API_TOKEN \
-  --from-literal=endpoint=$SYSDIG_SECURE_ENDPOINT \
-  -n voting-app
-```
+### 실시간 모니터링
+- **Sysdig Monitor**: 컨테이너 성능 및 보안 메트릭
+- **Kubernetes Dashboard**: 클러스터 상태 모니터링
+- **AWS CloudWatch**: EKS 클러스터 로그 및 메트릭
 
-### GitHub Actions 설정
-
-1. **Repository Secrets 추가**:
-   - `SYSDIG_SECURE_API_TOKEN`
-   - `SYSDIG_SECURE_ENDPOINT`
-   - `SNYK_TOKEN` (선택사항)
-
-2. **워크플로우 활성화**:
-   ```bash
-   # 기본 Sysdig v6 워크플로우
-   git add .github/workflows/sysdig-security-scan.yml
-   
-   # 고급 다중 도구 워크플로우
-   git add .github/workflows/advanced-security-scan.yml
-   
-   git commit -m "Add enhanced security scanning with v6"
-   git push
-   ```
-
-### 🆕 v6 업그레이드 혜택
-
-#### SBOM (Software Bill of Materials) 자동 생성
-```bash
-# SBOM 파일 확인
-ls -la sbom/
-# vote-sbom.spdx.json
-# worker-sbom.spdx.json  
-# result-sbom.spdx.json
-```
-
-#### GitHub Security 탭 통합
-- 모든 SARIF 결과가 GitHub Security 탭에 표시
-- 취약점 추적 및 관리 용이
-- 자동화된 보안 알림
-
-#### Multi-platform 이미지 지원
-```bash
-# AMD64 및 ARM64 아키텍처 모두 지원
-docker manifest inspect ghcr.io/your-org/example-voting-app/vote:latest
-```
-
-## 📈 보안 이벤트 시뮬레이션
-
-### 시뮬레이션 실행
-
-```bash
-# 보안 이벤트 시뮬레이션 스크립트 실행
-./scripts/security-event-simulation.sh
-```
-
-### 시뮬레이션 시나리오
-
-1. **🔍 의심스러운 파일 접근**
-   - `/etc/passwd`, `/etc/shadow` 접근 시도
-   - 시스템 파일 무단 접근
-
-2. **🌐 승인되지 않은 네트워크 연결**
-   - 외부 IP로의 예상치 못한 연결
-   - 비정상적인 포트 사용
-
-3. **⚡ 예상치 못한 프로세스 실행**
-   - 악성 스크립트 다운로드 시도
-   - 승인되지 않은 도구 실행
-
-4. **🔐 권한 상승 시도**
-   - sudo, su 명령 시도
-   - 루트 권한 획득 시도
-
-5. **🏃 컨테이너 탈출 시도**
-   - Docker 소켓 접근
-   - nsenter 명령 사용
-
-6. **💰 암호화폐 채굴**
-   - CPU 집약적 프로세스
-   - 채굴 풀 연결 시도
-
-7. **🐚 리버스 쉘 시도**
-   - netcat을 이용한 백도어
-   - bash 리버스 쉘
-
-8. **💉 SQL 인젝션**
-   - 악의적인 SQL 쿼리
-   - 데이터베이스 조작 시도
-
-### 🚨 이러한 활동이 의심스러운 이유
-
-1. **정상 동작 범위 초과**: 애플리케이션의 정상적인 동작 패턴을 벗어남
-2. **보안 정책 위반**: 설정된 보안 정책에서 명시적으로 금지된 행위
-3. **공격 패턴 유사**: 알려진 공격 기법과 유사한 패턴
-4. **데이터 유출 위험**: 민감한 정보에 대한 무단 접근 시도
-5. **시스템 손상 가능성**: 시스템 무결성을 해칠 수 있는 행위
+### 보안 이벤트 추적
+- **취약점 트렌드**: 시계열 보안 상태 분석
+- **정책 위반**: 실시간 보안 정책 위반 감지
+- **컴플라이언스 모니터링**: 보안 표준 준수 추적
 
 ## 📚 문서
 
-### 상세 문서
+- **[보안 구성](security/)**: 런타임 정책 및 컴플라이언스 설정
+- **[EKS 배포 가이드](k8s-specifications/)**: 상세한 Kubernetes 매니페스트 문서
+- **[프로젝트 요약](PROJECT-SUMMARY.md)**: 종합적인 프로젝트 개요
 
-- [📋 Sysdig 통합 계획서](docs/sysdig-integration-plan.md)
-- [🔒 보안 정책 가이드](sysdig-runtime-policies.yaml)
-- [📊 컴플라이언스 설정](sysdig-compliance-config.yaml)
-- [🔍 활동 감사 설정](sysdig-activity-audit.yaml)
-- [📈 프로젝트 요약](PROJECT-SUMMARY.md)
+## 🔧 기술 스택
 
-### API 문서
+### 핵심 기술
+- **컨테이너 오케스트레이션**: Amazon EKS (Kubernetes)
+- **마이크로서비스**: Python Flask, .NET Core, Node.js
+- **데이터 레이어**: Redis (캐시), PostgreSQL (영구 저장소)
+- **보안 플랫폼**: Sysdig v6 (취약점 스캐닝, 정책 검증)
 
-- [Vote API](vote/README.md)
-- [Worker API](worker/README.md)
-- [Result API](result/README.md)
+### DevSecOps 구현
+- **자동화된 보안 테스팅**: CI/CD 파이프라인 통합
+- **다층 보안**: 컨테이너 + 인프라 보안
+- **지속적인 모니터링**: 실시간 보안 상태 추적
+- **컴플라이언스 자동화**: 자동화된 보안 표준 검증
 
-### 운영 가이드
+## 🚦 시작하기
 
-```bash
-# 로그 확인
-kubectl logs -n voting-app -l app=vote --tail=100
-
-# 보안 이벤트 확인
-kubectl get events -n voting-app --field-selector type=Warning
-
-# 컴플라이언스 상태 확인
-sysdig-cli compliance status --zone voting-app-zone
-
-# SBOM 확인
-cat sbom/vote-sbom.spdx.json | jq '.packages[].name'
-
-# 이미지 서명 검증
-cosign verify ghcr.io/your-org/example-voting-app/vote:latest
-```
-
-## 🎯 활동 감사의 가치
-
-### 왜 활동 감사가 중요한가?
-
-1. **🔍 완전한 가시성**
-   - 모든 사용자 활동 추적
-   - 시스템 변경 사항 기록
-   - 데이터 접근 패턴 분석
-
-2. **🛡️ 보안 사고 대응**
-   - 사고 발생 시 근본 원인 분석
-   - 공격 경로 추적
-   - 피해 범위 파악
-
-3. **📋 컴플라이언스 준수**
-   - 규제 요구사항 충족
-   - 감사 증빙 자료 제공
-   - 내부 통제 강화
-
-4. **📊 위험 관리**
-   - 비정상적인 활동 패턴 탐지
-   - 내부자 위협 식별
-   - 보안 정책 효과성 평가
-
-5. **🔄 지속적인 개선**
-   - 보안 정책 최적화
-   - 프로세스 개선
-   - 교육 및 훈련 계획
-
-## 🆕 v6 업그레이드 요약
-
-### 주요 개선사항
-
-| 기능 | v5 | v6 | 개선점 |
-|------|----|----|--------|
-| 스캔 액션 | sysdiglabs/scan-action@v5 | sysdiglabs/scan-action@v6 | 향상된 정책 평가 |
-| 빌드 액션 | docker/build-push-action@v5 | docker/build-push-action@v6 | Multi-platform 지원 |
-| SARIF 지원 | ❌ | ✅ | GitHub Security 통합 |
-| SBOM 생성 | ❌ | ✅ | 자동 생성 |
-| Provenance | ❌ | ✅ | 빌드 출처 증명 |
-| 다중 도구 | ❌ | ✅ | 8개 보안 도구 통합 |
-
-### 추가된 보안 도구
-
-- **Trivy v0.24.0**: 종합적인 취약점 스캔
-- **Snyk v0.4.0**: 의존성 보안 분석
-- **Grype v4**: Anchore 기반 이미지 스캔
-- **Checkov v12**: IaC 보안 검증
-- **Semgrep**: 정적 코드 분석
-- **Cosign v3.5.0**: 이미지 서명
-- **SLSA v2.0.0**: 공급망 보안
-
-## 🤝 기여하기
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 라이선스
-
-이 프로젝트는 Apache 2.0 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
-
-## 🆘 지원
-
-- 📧 이메일: security-team@company.com
-- 💬 Slack: #voting-app-security
-- 📖 문서: [Sysdig Documentation](https://docs.sysdig.com)
-- 🐛 이슈: [GitHub Issues](https://github.com/your-org/example-voting-app/issues)
+1. **저장소 클론**: `git clone <repository-url>`
+2. **시크릿 구성**: GitHub에서 Sysdig API 자격 증명 설정
+3. **EKS에 배포**: Kubernetes 매니페스트 적용
+4. **보안 모니터링**: GitHub Security 탭 및 Sysdig 콘솔 확인
+5. **안전한 반복**: 개발을 위한 자동화된 보안 검사 사용
 
 ---
 
-**⚠️ 주의사항**: 이 애플리케이션은 교육 및 데모 목적으로 설계되었습니다. 프로덕션 환경에서 사용하기 전에 추가적인 보안 검토가 필요합니다.
+**🚀 이 프로젝트는 클라우드 네이티브 애플리케이션을 위한 프로덕션 준비 보안 관행을 시연합니다.**
 
-**🎉 v6 Enhanced**: 최신 Sysdig v6 및 8개의 보안 도구가 통합된 종합 보안 솔루션입니다!
+**📧 질문이나 개선사항이 있으시면 이슈를 열거나 풀 리퀘스트를 제출해 주세요.**

@@ -64,7 +64,7 @@ jobs:
 
       - name: Build Vote Service Image
         run: |
-          docker build -t vote-local:${{ github.sha }} ./vote --target final
+          docker build -t vote-local:${{ github.sha }} ./vote --target final --platform linux/amd64
           docker images vote-local:${{ github.sha }}
 
       - name: Sysdig Container Image Scan
@@ -109,7 +109,7 @@ jobs:
 
       - name: Build Worker Service Image
         run: |
-          docker build -t worker-local:${{ github.sha }} ./worker
+          docker build -t worker-local:${{ github.sha }} ./worker --platform linux/amd64
           docker images worker-local:${{ github.sha }}
 
       - name: Sysdig Container Image Scan
@@ -154,7 +154,7 @@ jobs:
 
       - name: Build Result Service Image
         run: |
-          docker build -t result-local:${{ github.sha }} ./result
+          docker build -t result-local:${{ github.sha }} ./result --platform linux/amd64
           docker images result-local:${{ github.sha }}
 
       - name: Sysdig Container Image Scan
