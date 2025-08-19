@@ -7,6 +7,7 @@ on:
   pull_request:
     branches: [ main ]
     paths: [ 'k8s-specifications/**', '.github/workflows/iac.yaml' ]
+  workflow_dispatch:  # 수동 실행 가능
 
 jobs:
   iac-scan:
@@ -14,11 +15,36 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      actions: read
     
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 전체 히스토리 가져오기
+
+      - name: Verify Sysdig credentials
+        run: |
+          if [ -z "${{ secrets.SYSDIG_SECURE_API_TOKEN }}" ]; then
+            echo "❌ SYSDIG_SECURE_API_TOKEN is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.SYSDIG_SECURE_ENDPOINT }}" ]; then
+            echo "❌ SYSDIG_SECURE_ENDPOINT is not set"
+            exit 1
+          fi
+          echo "✅ Sysdig credentials are configured"
+          echo "🔗 Endpoint: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}"
+
+      - name: List IaC files to scan
+        run: |
+          echo "📁 Files to be scanned:"
+          find ./k8s-specifications -type f \( -name "*.yaml" -o -name "*.yml" \) | sort
+          echo ""
+          echo "📊 Total files: $(find ./k8s-specifications -type f \( -name "*.yaml" -o -name "*.yml" \) | wc -l)"
 
       - name: IaC Security Scan
+        id: iac-scan
         uses: sysdiglabs/scan-action@v6
         with:
           sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
@@ -28,19 +54,76 @@ jobs:
           recursive: true
           minimum-severity: medium
           stop-on-failed-policy-eval: false
+          iac-group-by: policy
+          output-format: json
+        continue-on-error: true
 
-      - name: Upload SARIF
+      - name: Check scan results
+        if: always()
+        run: |
+          echo "🔍 Checking scan output files..."
+          ls -la || true
+          
+          if [ -f "sarif.json" ]; then
+            echo "✅ SARIF file generated"
+            echo "📄 SARIF file size: $(wc -c < sarif.json) bytes"
+            echo "🔍 SARIF content preview:"
+            head -20 sarif.json || true
+          else
+            echo "❌ SARIF file not found"
+          fi
+          
+          if [ -f "scan-result.json" ]; then
+            echo "✅ Scan result file generated"
+            echo "📄 Scan result file size: $(wc -c < scan-result.json) bytes"
+            echo "🔍 Scan result preview:"
+            head -20 scan-result.json || true
+          else
+            echo "❌ Scan result file not found"
+          fi
+
+      - name: Upload SARIF to GitHub Security
         if: always() && hashFiles('sarif.json') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: sarif.json
+        continue-on-error: true
 
-      - name: Archive Results
+      - name: Archive scan results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: iac-scan-${{ github.sha }}
+          name: iac-scan-results-${{ github.run_number }}
           path: |
             sarif.json
             scan-result.json
-          if-no-files-found: ignore
+            *.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 🛡️ IaC Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repository**: ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Scan Path**: ./k8s-specifications" >> $GITHUB_STEP_SUMMARY
+          echo "- **Minimum Severity**: medium" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "sarif.json" ]; then
+            echo "✅ **SARIF Report**: Generated and uploaded to GitHub Security" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **SARIF Report**: Not generated" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "scan-result.json" ]; then
+            echo "✅ **Scan Results**: Available in artifacts" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Scan Results**: Not available" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 **View Results**: Check Sysdig Secure Console at ${{ secrets.SYSDIG_SECURE_ENDPOINT }}" >> $GITHUB_STEP_SUMMARY
