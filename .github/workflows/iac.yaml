@@ -14,7 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
     
     steps:
       - uses: actions/checkout@v4
@@ -29,20 +28,12 @@ jobs:
           recursive: true
           minimum-severity: medium
           stop-on-failed-policy-eval: false
-          extra-parameters: "--output-json scan-result.json --output-sarif sarif.json"
-
-      - name: Upload SARIF
-        if: always() && hashFiles('sarif.json') != ''
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: sarif.json
+          extra-parameters: "--output-json scan-result.json"
 
       - name: Archive Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: iac-scan-${{ github.run_number }}
-          path: |
-            sarif.json
-            scan-result.json
+          path: scan-result.json
           if-no-files-found: ignore
