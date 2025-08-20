@@ -7,6 +7,7 @@ on:
   pull_request:
     branches: [ main ]
     paths: [ 'result/**', '.github/workflows/result.yaml' ]
+  workflow_dispatch:
 
 env:
   HARBOR_REGISTRY: hw-harbor.bluesunnywings.com
