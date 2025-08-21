@@ -9,6 +9,11 @@ on:
     paths: [ 'result/**', '.github/workflows/result.yaml' ]
   workflow_dispatch:
 
+# Prevent concurrent GitOps updates
+concurrency:
+  group: gitops-update
+  cancel-in-progress: false
+
 env:
   HARBOR_REGISTRY: hw-harbor.bluesunnywings.com
   HARBOR_PROJECT: sysdig-poc

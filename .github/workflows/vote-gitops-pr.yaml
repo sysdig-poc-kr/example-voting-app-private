@@ -1,4 +1,4 @@
-name: Vote Service
+name: Vote Service GitOps PR
 
 on:
   push:
@@ -8,11 +8,6 @@ on:
     branches: [ main ]
     paths: [ 'vote/**', '.github/workflows/vote.yaml' ]
   workflow_dispatch:
-
-# Prevent concurrent GitOps updates
-concurrency:
-  group: gitops-update
-  cancel-in-progress: false
 
 env:
   HARBOR_REGISTRY: hw-harbor.bluesunnywings.com
@@ -72,12 +67,18 @@ jobs:
           sbom: false
           outputs: type=image,oci-mediatypes=false
 
-      - name: Update GitOps Manifest
+      - name: Create GitOps PR
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
-          # Configure git with GitHub Actions bot
+          # Configure git
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
+          
+          # Create unique branch name
+          BRANCH_NAME="gitops/${{ env.SERVICE }}-${{ github.sha }}-$(date +%s)"
+          
+          # Create and switch to new branch
+          git checkout -b "$BRANCH_NAME"
           
           # Update image tag in manifest
           sed -i "s|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:.*|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}|g" manifests/vote/deployment.yaml
@@ -95,43 +96,52 @@ jobs:
           Auto-updated by GitHub Actions
           - Workflow: ${{ github.workflow }}
           - Run: ${{ github.run_number }}
-          - Commit: ${{ github.sha }}"
+          - Commit: ${{ github.sha }}
+          - Image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}"
           
-          # Push with retry logic and conflict resolution
-          for i in {1..5}; do
-            echo "Push attempt $i/5"
-            
-            # Fetch latest changes
-            git fetch origin main
-            
-            # Check if we need to rebase
-            if ! git push origin HEAD:main; then
-              echo "Push failed, rebasing..."
-              
-              # Rebase on latest main
-              git pull --rebase origin main
-              
-              # If rebase conflicts, resolve by keeping our changes
-              if [ $? -ne 0 ]; then
-                echo "Rebase conflicts detected, resolving..."
-                git checkout --ours manifests/vote/deployment.yaml
-                git add manifests/vote/deployment.yaml
-                git rebase --continue
-              fi
-              
-              # Try push again after rebase
-              if [ $i -eq 5 ]; then
-                echo "Failed to push after 5 attempts"
-                exit 1
-              fi
-            else
-              echo "Successfully pushed changes"
-              break
-            fi
-            
-            # Wait before retry
-            sleep $((i * 2))
-          done
+          # Push branch
+          git push origin "$BRANCH_NAME"
+          
+          # Create PR using GitHub CLI
+          gh pr create \
+            --title "🚀 GitOps: Update ${{ env.SERVICE }} to v2-${{ github.sha }}" \
+            --body "## 🚀 Automated GitOps Update
+
+          **Service**: ${{ env.SERVICE }}
+          **New Image**: \`${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}\`
+          **Workflow Run**: [${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          **Source Commit**: [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+
+          ### 🔍 Changes
+          - Updated container image tag in \`manifests/${{ env.SERVICE }}/deployment.yaml\`
+          - Passed security scanning with Sysdig
+          - Successfully pushed to Harbor Registry
+
+          ### ✅ Auto-merge
+          This PR will be automatically merged if all checks pass." \
+            --head "$BRANCH_NAME" \
+            --base main \
+            --label "gitops,automated,${{ env.SERVICE }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge PR
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          # Wait a moment for PR to be created
+          sleep 5
+          
+          # Get PR number
+          PR_NUMBER=$(gh pr list --head "gitops/${{ env.SERVICE }}-${{ github.sha }}-*" --json number --jq '.[0].number')
+          
+          if [ -n "$PR_NUMBER" ]; then
+            echo "Auto-merging PR #$PR_NUMBER"
+            gh pr merge "$PR_NUMBER" --squash --delete-branch
+          else
+            echo "PR not found for auto-merge"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload SARIF
         if: always() && hashFiles('sarif.json') != ''
