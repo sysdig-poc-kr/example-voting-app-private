@@ -3,10 +3,10 @@ name: Infrastructure Security
 on:
   push:
     branches: [ main, develop ]
-    paths: [ 'manifests/**', 'argocd/**', 'k8s-specifications/**', '.github/workflows/iac.yaml' ]
+    paths: [ 'manifests/**', 'argocd/**', '.github/workflows/iac.yaml' ]
   pull_request:
     branches: [ main ]
-    paths: [ 'manifests/**', 'argocd/**', 'k8s-specifications/**', '.github/workflows/iac.yaml' ]
+    paths: [ 'manifests/**', 'argocd/**', '.github/workflows/iac.yaml' ]
   workflow_dispatch:
 
 jobs:
@@ -41,19 +41,6 @@ jobs:
           minimum-severity: medium
           stop-on-failed-policy-eval: false
           extra-parameters: "--output-json argocd-scan-result.json"
-
-      - name: IaC Security Scan - Legacy K8s Specs
-        if: hashFiles('k8s-specifications/**') != ''
-        uses: sysdiglabs/scan-action@v6
-        with:
-          sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
-          sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
-          mode: iac
-          iac-scan-path: ./k8s-specifications
-          recursive: true
-          minimum-severity: medium
-          stop-on-failed-policy-eval: false
-          extra-parameters: "--output-json legacy-scan-result.json"
 
       - name: Display Scan Results
         if: always()
