@@ -73,7 +73,7 @@ jobs:
       - name: Update GitOps Manifest
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
-          # Configure git with GitHub Actions bot
+          # Configure git
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
@@ -88,47 +88,37 @@ jobs:
           
           # Commit changes
           git add manifests/worker/deployment.yaml
-          git commit -m "🚀 Update ${{ env.SERVICE }} image to v2-${{ github.sha }}
-
-          Auto-updated by GitHub Actions
-          - Workflow: ${{ github.workflow }}
-          - Run: ${{ github.run_number }}
-          - Commit: ${{ github.sha }}"
+          git commit -m "🚀 Update ${{ env.SERVICE }} image to v2-${{ github.sha }}"
           
-          # Push with retry logic and conflict resolution
+          # Push with simple retry and pull logic
           for i in {1..5}; do
             echo "Push attempt $i/5"
             
-            # Fetch latest changes
-            git fetch origin main
-            
-            # Check if we need to rebase
-            if ! git push origin HEAD:main; then
-              echo "Push failed, rebasing..."
+            if git push origin HEAD:main; then
+              echo "✅ Successfully pushed changes"
+              break
+            else
+              echo "❌ Push failed, pulling latest changes..."
               
-              # Rebase on latest main
+              # Pull latest changes and rebase
               git pull --rebase origin main
               
-              # If rebase conflicts, resolve by keeping our changes
+              # If there are conflicts, our change should win (it's just one line)
               if [ $? -ne 0 ]; then
-                echo "Rebase conflicts detected, resolving..."
+                echo "🔧 Resolving conflicts..."
                 git checkout --ours manifests/worker/deployment.yaml
                 git add manifests/worker/deployment.yaml
                 git rebase --continue
               fi
               
-              # Try push again after rebase
               if [ $i -eq 5 ]; then
-                echo "Failed to push after 5 attempts"
+                echo "❌ Failed to push after 5 attempts"
                 exit 1
               fi
-            else
-              echo "Successfully pushed changes"
-              break
+              
+              # Wait before retry (exponential backoff)
+              sleep $((i * 3))
             fi
-            
-            # Wait before retry
-            sleep $((i * 2))
           done
 
       - name: Upload SARIF
