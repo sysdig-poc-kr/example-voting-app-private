@@ -9,9 +9,9 @@ on:
     paths: [ 'worker/**', '.github/workflows/worker.yaml' ]
   workflow_dispatch:
 
-# Prevent concurrent GitOps updates
+# Prevent concurrent GitOps updates for this service only
 concurrency:
-  group: gitops-update
+  group: gitops-update-worker
   cancel-in-progress: false
 
 env:
@@ -90,34 +90,45 @@ jobs:
           git add manifests/worker/deployment.yaml
           git commit -m "🚀 Update ${{ env.SERVICE }} image to v2-${{ github.sha }}"
           
-          # Push with simple retry and pull logic
-          for i in {1..5}; do
-            echo "Push attempt $i/5"
+          # Push with robust retry and conflict resolution
+          for i in {1..10}; do
+            echo "🔄 Push attempt $i/10"
             
+            # Always fetch latest before attempting push
+            git fetch origin main
+            
+            # Try to push
             if git push origin HEAD:main; then
-              echo "✅ Successfully pushed changes"
+              echo "✅ Successfully pushed changes on attempt $i"
               break
             else
-              echo "❌ Push failed, pulling latest changes..."
+              echo "❌ Push failed on attempt $i, resolving conflicts..."
               
-              # Pull latest changes and rebase
+              # Reset to our commit and rebase on latest main
+              git reset --hard HEAD~1
               git pull --rebase origin main
               
-              # If there are conflicts, our change should win (it's just one line)
-              if [ $? -ne 0 ]; then
-                echo "🔧 Resolving conflicts..."
-                git checkout --ours manifests/worker/deployment.yaml
+              # Re-apply our changes
+              sed -i "s|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:.*|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}|g" manifests/worker/deployment.yaml
+              
+              # Check if we still have changes after rebase
+              if ! git diff --quiet manifests/worker/deployment.yaml; then
                 git add manifests/worker/deployment.yaml
-                git rebase --continue
+                git commit -m "🚀 Update ${{ env.SERVICE }} image to v2-${{ github.sha }}"
+              else
+                echo "✅ Changes already applied by another workflow"
+                break
               fi
               
-              if [ $i -eq 5 ]; then
-                echo "❌ Failed to push after 5 attempts"
+              if [ $i -eq 10 ]; then
+                echo "❌ Failed to push after 10 attempts"
                 exit 1
               fi
               
-              # Wait before retry (exponential backoff)
-              sleep $((i * 3))
+              # Exponential backoff with jitter
+              sleep_time=$((i * 2 + RANDOM % 5))
+              echo "⏳ Waiting ${sleep_time}s before retry..."
+              sleep $sleep_time
             fi
           done
 
