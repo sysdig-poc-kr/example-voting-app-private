@@ -18,12 +18,15 @@ jobs:
   build-scan-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       security-events: write
       pull-requests: write
     
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
       - uses: docker/setup-buildx-action@v3
         
       - name: Harbor Login
@@ -63,6 +66,21 @@ jobs:
           provenance: false
           sbom: false
           outputs: type=image,oci-mediatypes=false
+
+      - name: Update GitOps Manifest
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          # Configure git
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Update image tag in manifest
+          sed -i "s|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:.*|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}|g" manifests/vote/deployment.yaml
+          
+          # Commit and push changes
+          git add manifests/vote/deployment.yaml
+          git commit -m "Update ${{ env.SERVICE }} image to v2-${{ github.sha }}" || exit 0
+          git push
 
       - name: Upload SARIF
         if: always() && hashFiles('sarif.json') != ''

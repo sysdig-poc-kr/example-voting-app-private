@@ -3,10 +3,10 @@ name: Infrastructure Security
 on:
   push:
     branches: [ main, develop ]
-    paths: [ 'k8s-specifications/**', '.github/workflows/iac.yaml' ]
+    paths: [ 'manifests/**', 'argocd/**', 'k8s-specifications/**', '.github/workflows/iac.yaml' ]
   pull_request:
     branches: [ main ]
-    paths: [ 'k8s-specifications/**', '.github/workflows/iac.yaml' ]
+    paths: [ 'manifests/**', 'argocd/**', 'k8s-specifications/**', '.github/workflows/iac.yaml' ]
   workflow_dispatch:
 
 jobs:
@@ -18,7 +18,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: IaC Security Scan
+      - name: IaC Security Scan - Manifests
+        uses: sysdiglabs/scan-action@v6
+        with:
+          sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
+          sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
+          mode: iac
+          iac-scan-path: ./manifests
+          recursive: true
+          minimum-severity: medium
+          stop-on-failed-policy-eval: false
+          extra-parameters: "--output-json manifests-scan-result.json"
+
+      - name: IaC Security Scan - ArgoCD
+        uses: sysdiglabs/scan-action@v6
+        with:
+          sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
+          sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
+          mode: iac
+          iac-scan-path: ./argocd
+          recursive: true
+          minimum-severity: medium
+          stop-on-failed-policy-eval: false
+          extra-parameters: "--output-json argocd-scan-result.json"
+
+      - name: IaC Security Scan - Legacy K8s Specs
+        if: hashFiles('k8s-specifications/**') != ''
         uses: sysdiglabs/scan-action@v6
         with:
           sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
@@ -28,44 +53,53 @@ jobs:
           recursive: true
           minimum-severity: medium
           stop-on-failed-policy-eval: false
-          extra-parameters: "--output-json scan-result.json"
+          extra-parameters: "--output-json legacy-scan-result.json"
 
       - name: Display Scan Results
-        if: always() && hashFiles('scan-result.json') != ''
+        if: always()
         run: |
           echo "## 🛡️ IaC Security Scan Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [ -f "scan-result.json" ]; then
-            # Extract key information from JSON
-            TOTAL_RESOURCES=$(jq -r '.summary.totalResources // "N/A"' scan-result.json 2>/dev/null || echo "N/A")
-            FAILED_POLICIES=$(jq -r '.summary.failedPolicies // "N/A"' scan-result.json 2>/dev/null || echo "N/A")
-            PASSED_POLICIES=$(jq -r '.summary.passedPolicies // "N/A"' scan-result.json 2>/dev/null || echo "N/A")
+          # Function to process scan results
+          process_scan_result() {
+            local file=$1
+            local title=$2
             
-            echo "### 📊 Summary" >> $GITHUB_STEP_SUMMARY
-            echo "- **Total Resources Scanned**: $TOTAL_RESOURCES" >> $GITHUB_STEP_SUMMARY
-            echo "- **Failed Policies**: $FAILED_POLICIES" >> $GITHUB_STEP_SUMMARY
-            echo "- **Passed Policies**: $PASSED_POLICIES" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            
-            # Show policy violations if any
-            if [ "$FAILED_POLICIES" != "0" ] && [ "$FAILED_POLICIES" != "N/A" ]; then
-              echo "### ⚠️ Policy Violations" >> $GITHUB_STEP_SUMMARY
-              jq -r '.results[]? | select(.severity != null) | "- **\(.policyName // .ruleName)**: \(.severity) - \(.description // .message)"' scan-result.json 2>/dev/null | head -10 >> $GITHUB_STEP_SUMMARY || echo "Details available in artifact" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "### ✅ No Policy Violations Found" >> $GITHUB_STEP_SUMMARY
+            if [ -f "$file" ]; then
+              echo "### 📊 $title" >> $GITHUB_STEP_SUMMARY
+              
+              TOTAL_RESOURCES=$(jq -r '.summary.totalResources // "N/A"' "$file" 2>/dev/null || echo "N/A")
+              FAILED_POLICIES=$(jq -r '.summary.failedPolicies // "N/A"' "$file" 2>/dev/null || echo "N/A")
+              PASSED_POLICIES=$(jq -r '.summary.passedPolicies // "N/A"' "$file" 2>/dev/null || echo "N/A")
+              
+              echo "- **Total Resources**: $TOTAL_RESOURCES" >> $GITHUB_STEP_SUMMARY
+              echo "- **Failed Policies**: $FAILED_POLICIES" >> $GITHUB_STEP_SUMMARY
+              echo "- **Passed Policies**: $PASSED_POLICIES" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              
+              if [ "$FAILED_POLICIES" != "0" ] && [ "$FAILED_POLICIES" != "N/A" ]; then
+                echo "#### ⚠️ Policy Violations" >> $GITHUB_STEP_SUMMARY
+                jq -r '.results[]? | select(.severity != null) | "- **\(.policyName // .ruleName)**: \(.severity) - \(.description // .message)"' "$file" 2>/dev/null | head -5 >> $GITHUB_STEP_SUMMARY || echo "Details in artifact" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+              fi
             fi
-            
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "📁 **Full Results**: Download the \`scan-result.json\` artifact for complete details" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ Scan result file not found" >> $GITHUB_STEP_SUMMARY
-          fi
+          }
+          
+          # Process each scan result
+          process_scan_result "manifests-scan-result.json" "Manifests Scan"
+          process_scan_result "argocd-scan-result.json" "ArgoCD Scan"
+          process_scan_result "legacy-scan-result.json" "Legacy K8s Specs Scan"
+          
+          echo "📁 **Full Results**: Download artifacts for complete details" >> $GITHUB_STEP_SUMMARY
 
       - name: Archive Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: iac-scan-${{ github.run_number }}
-          path: scan-result.json
+          path: |
+            manifests-scan-result.json
+            argocd-scan-result.json
+            legacy-scan-result.json
           if-no-files-found: ignore
