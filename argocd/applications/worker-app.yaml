@@ -9,7 +9,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/hyungwook/example-voting-app-private.git
+    repoURL: https://github.com/sysdig-poc-kr/example-voting-app-private.git
     targetRevision: HEAD
     path: manifests/worker
   destination:
