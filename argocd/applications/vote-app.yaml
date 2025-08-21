@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: voting-app-vote
-  namespace: argocd
+  namespace: default
   labels:
     app.kubernetes.io/name: voting-app-vote
     app.kubernetes.io/part-of: voting-app

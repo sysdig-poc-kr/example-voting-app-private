@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: voting-app
-  namespace: argocd
+  namespace: default
   labels:
     app.kubernetes.io/name: voting-app
     app.kubernetes.io/managed-by: argocd
@@ -14,7 +14,7 @@ spec:
     path: argocd/applications
   destination:
     server: https://kubernetes.default.svc
-    namespace: argocd
+    namespace: default
   syncPolicy:
     automated:
       prune: true
