@@ -23,6 +23,7 @@ jobs:
         with:
           sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
           sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
+          cli-scanner-version: 1.22.5
           mode: iac
           iac-scan-path: ./manifests
           recursive: true
@@ -35,6 +36,7 @@ jobs:
         with:
           sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
           sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
+          cli-scanner-version: 1.22.5
           mode: iac
           iac-scan-path: ./argocd
           recursive: true
