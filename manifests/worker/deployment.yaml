@@ -18,5 +18,5 @@ spec:
       imagePullSecrets:
       - name: harbor-registry-secret
       containers:
-      - image: hw-harbor.bluesunnywings.com/sysdig-poc/worker:v2-aaf1603f2ee709a96de5edd6c246b42d74513876
+      - image: hw-harbor.bluesunnywings.com/sysdig-poc/worker:v2-0d85ab4622c4332867f0c347746c1f6fa0f14dca
         name: worker
