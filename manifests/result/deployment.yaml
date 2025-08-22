@@ -18,23 +18,8 @@ spec:
       imagePullSecrets:
       - name: harbor-registry-secret
       containers:
-      - image: hw-harbor.bluesunnywings.com/sysdig-poc/result:v2-7f4f3b6bcb69b9dfd36ebb39143067f2e551f378
+      - image: hw-harbor.bluesunnywings.com/sysdig-poc/result:v2-aaf1603f2ee709a96de5edd6c246b42d74513876
         name: result
         ports:
         - containerPort: 80
           name: result
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "50m"
-          limits:
-            memory: "128Mi"
-            cpu: "100m"
-        securityContext:
-          allowPrivilegeEscalation: false
-          runAsNonRoot: true
-          runAsUser: 1000
-          capabilities:
-            drop:
-            - ALL
-          readOnlyRootFilesystem: true

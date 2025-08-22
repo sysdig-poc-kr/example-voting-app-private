@@ -29,20 +29,6 @@ spec:
         volumeMounts:
         - mountPath: /var/lib/postgresql/data
           name: db-data
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "200m"
-        securityContext:
-          allowPrivilegeEscalation: false
-          runAsNonRoot: true
-          runAsUser: 999
-          capabilities:
-            drop:
-            - ALL
       volumes:
       - name: db-data
         emptyDir: {}
