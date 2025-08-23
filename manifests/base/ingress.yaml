@@ -12,6 +12,17 @@ metadata:
     alb.ingress.kubernetes.io/backend-protocol: HTTP
     alb.ingress.kubernetes.io/group.name: common-ingress
     external-dns.alpha.kubernetes.io/hostname: "hw-votingapp.bluesunnywings.com,result.hw-votingapp.bluesunnywings.com"
+    # ALB 리다이렉트 액션 정의
+    alb.ingress.kubernetes.io/actions.redirect-to-result: |
+      {
+        "type": "redirect",
+        "redirectConfig": {
+          "statusCode": "HTTP_301",
+          "host": "result.hw-votingapp.bluesunnywings.com",
+          "path": "/",
+          "query": "#{query}"
+        }
+      }
 spec:
   ingressClassName: alb
   rules:
@@ -19,6 +30,15 @@ spec:
     - host: hw-votingapp.bluesunnywings.com
       http:
         paths:
+          # /result 경로는 서브도메인으로 리다이렉트
+          - path: /result
+            pathType: Prefix
+            backend:
+              service:
+                name: redirect-to-result
+                port:
+                  name: use-annotation
+          # 나머지 모든 경로는 vote 서비스로
           - path: /
             pathType: Prefix
             backend:
@@ -26,7 +46,7 @@ spec:
                 name: vote
                 port:
                   number: 8080
-    # Result service - subdomain
+    # Result service - subdomain (인증서 문제로 HTTP만 지원)
     - host: result.hw-votingapp.bluesunnywings.com
       http:
         paths:
