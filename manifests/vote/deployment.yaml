@@ -21,7 +21,7 @@ spec:
       imagePullSecrets:
       - name: harbor-registry-secret
       containers:
-      - image: hw-harbor.bluesunnywings.com/sysdig-poc/vote:v2-7dfff6d18ac74641b0d5df68467127cf083034d2
+      - image: hw-harbor.bluesunnywings.com/sysdig-poc/vote:v2-65b527725af3530b7948579b81d2f179a75ada7c
         name: vote
         ports:
         - containerPort: 80
