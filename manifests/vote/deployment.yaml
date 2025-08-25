@@ -23,15 +23,3 @@ spec:
         ports:
         - containerPort: 80
           name: vote
-        securityContext:
-          readOnlyRootFilesystem: true
-        volumeMounts:
-        - name: tmp-volume
-          mountPath: /tmp
-        - name: var-tmp-volume
-          mountPath: /var/tmp
-      volumes:
-      - name: tmp-volume
-        emptyDir: {}
-      - name: var-tmp-volume
-        emptyDir: {}
