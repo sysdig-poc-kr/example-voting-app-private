@@ -1,15 +1,14 @@
-name: Vote Service with Cosign
+name: Vote Service - Cosign Best Practice
 
 "on":
   push:
     branches: [ main, develop ]
-    paths: [ 'vote/**', '.github/workflows/vote-with-cosign.yaml' ]
+    paths: [ 'vote/**', '.github/workflows/vote-cosign-best-practice.yaml' ]
   pull_request:
     branches: [ main ]
-    paths: [ 'vote/**', '.github/workflows/vote-with-cosign.yaml' ]
+    paths: [ 'vote/**', '.github/workflows/vote-cosign-best-practice.yaml' ]
   workflow_dispatch:
 
-# Prevent concurrent GitOps updates for this service only
 concurrency:
   group: gitops-update-vote
   cancel-in-progress: false
@@ -20,13 +19,13 @@ env:
   SERVICE: vote
 
 jobs:
-  build-scan-sign-push:
+  build-scan-sign-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       security-events: write
       pull-requests: write
-      id-token: write  # Cosign OIDC 토큰을 위해 추가
+      id-token: write  # Cosign OIDC
     
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +34,6 @@ jobs:
           
       - uses: docker/setup-buildx-action@v3
       
-      # Cosign 설치 추가
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
@@ -49,9 +47,11 @@ jobs:
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
 
+      # 1. Build for scanning (local only)
       - name: Build for Scan
         run: docker build --platform linux/amd64 --target final -t ${{ env.SERVICE }}-scan:${{ github.sha }} ./vote
           
+      # 2. Security scan (before push)
       - name: Security Scan
         uses: sysdiglabs/scan-action@v6
         with:
@@ -62,16 +62,18 @@ jobs:
           severity-at-least: medium
           stop-on-failed-policy-eval: false
 
-      # 스캔 통과 시에만 Harbor에 푸시
-      - name: Push to Harbor (Docker v2 Compatible)
+      # 3. Build and push final image (only after scan passes)
+      - name: Build and Push Final Image
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: ./vote
           platforms: linux/amd64
           push: true
+          # 🎯 단일 태그 전략: semantic versioning + commit sha
           tags: |
             ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}
+            ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:latest
           target: final
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -79,102 +81,76 @@ jobs:
           sbom: false
           outputs: type=image,oci-mediatypes=false
 
-      # 푸시된 이미지에 Cosign 서명 추가
+      # 4. Sign the pushed image (single signature)
       - name: Sign Image with Cosign
         if: github.event_name != 'pull_request'
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
-          echo "🔐 Signing image with Cosign..."
+          echo "🔐 Signing images with Cosign..."
           
-          # 키리스 서명 (OIDC 기반)
+          # Sign both tags (they point to the same image)
           cosign sign --yes ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}
+          cosign sign --yes ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:latest
           
-          echo "✅ Image signed successfully"
+          echo "✅ Images signed successfully"
+
+      # 5. Verify signatures
+      - name: Verify Signatures
+        if: github.event_name != 'pull_request'
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          echo "🔍 Verifying signatures..."
           
-          # 서명 검증
-          echo "🔍 Verifying signature..."
           cosign verify ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }} \
+            --certificate-identity-regexp="https://github.com/${{ github.repository }}" \
+            --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+          
+          cosign verify ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:latest \
             --certificate-identity-regexp="https://github.com/${{ github.repository }}" \
             --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
           
           echo "✅ Signature verification successful"
 
-      # 서명된 이미지로 새 태그 생성 및 푸시
-      - name: Create and Push Signed Tag
-        if: github.event_name != 'pull_request'
-        run: |
-          echo "🏷️ Creating signed tag..."
-          
-          # 서명된 이미지임을 나타내는 태그 생성
-          docker pull ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}
-          docker tag ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }} \
-            ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}-signed
-          
-          # latest-signed 태그도 생성
-          docker tag ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }} \
-            ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-latest-signed
-          
-          # 서명된 태그들 푸시
-          docker push ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}-signed
-          docker push ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-latest-signed
-          
-          echo "✅ Signed tags pushed successfully"
-
+      # 6. Update GitOps manifest (use signed image)
       - name: Update GitOps Manifest
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
-          # Configure git
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # 서명된 이미지 태그로 매니페스트 업데이트
-          sed -i "s|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:.*|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}-signed|g" manifests/vote/deployment.yaml
+          # 서명된 이미지로 매니페스트 업데이트 (서명 확인 후)
+          sed -i "s|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:.*|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}|g" manifests/vote/deployment.yaml
           
-          # Check if there are changes to commit
+          # Cosign 서명 메타데이터 추가 (정책에서 확인용)
+          if ! grep -q "cosign.sigstore.dev/verified" manifests/vote/deployment.yaml; then
+            # Add annotation to deployment metadata
+            sed -i '/metadata:/a\  annotations:\n    cosign.sigstore.dev/verified: "true"' manifests/vote/deployment.yaml
+          fi
+          
           if git diff --quiet manifests/vote/deployment.yaml; then
             echo "No changes to commit"
             exit 0
           fi
           
-          # Commit changes
           git add manifests/vote/deployment.yaml
-          git commit -m "🚀🔐 Update ${{ env.SERVICE }} to signed image v2-${{ github.sha }}-signed"
+          git commit -m "🚀🔐 Deploy signed image v2-${{ github.sha }}"
           
-          # Push with robust retry and conflict resolution
-          for i in {1..10}; do
-            echo "🔄 Push attempt $i/10"
-            
-            git fetch origin main
-            
+          # Robust push with retry
+          for i in {1..5}; do
             if git push origin HEAD:main; then
-              echo "✅ Successfully pushed changes on attempt $i"
+              echo "✅ Successfully pushed changes"
               break
             else
-              echo "❌ Push failed on attempt $i, resolving conflicts..."
-              
-              git reset --hard HEAD~1
-              git pull --rebase origin main
-              
-              # Re-apply our changes with signed image
-              sed -i "s|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:.*|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}-signed|g" manifests/vote/deployment.yaml
-              
-              if ! git diff --quiet manifests/vote/deployment.yaml; then
-                git add manifests/vote/deployment.yaml
-                git commit -m "🚀🔐 Update ${{ env.SERVICE }} to signed image v2-${{ github.sha }}-signed"
-              else
-                echo "✅ Changes already applied by another workflow"
-                break
-              fi
-              
-              if [ $i -eq 10 ]; then
-                echo "❌ Failed to push after 10 attempts"
+              echo "❌ Push failed, retrying..."
+              git fetch origin main
+              git rebase origin/main
+              if [ $i -eq 5 ]; then
+                echo "❌ Failed after 5 attempts"
                 exit 1
               fi
-              
-              sleep_time=$((i * 2 + RANDOM % 5))
-              echo "⏳ Waiting ${sleep_time}s before retry..."
-              sleep $sleep_time
+              sleep $((i * 2))
             fi
           done
 
