@@ -1,6 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  annotations:
+    cosign.sigstore.dev/verified: "true"
+    cosign.sigstore.dev/signed-at: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   labels:
     app: vote
   name: vote
@@ -18,7 +21,7 @@ spec:
       imagePullSecrets:
       - name: harbor-registry-secret
       containers:
-      - image: hw-harbor.bluesunnywings.com/sysdig-poc/vote:v2-82dcbb846e82b13622bd7308fe45409e500a495e-signed
+      - image: hw-harbor.bluesunnywings.com/sysdig-poc/vote:v2-7dfff6d18ac74641b0d5df68467127cf083034d2
         name: vote
         ports:
         - containerPort: 80
