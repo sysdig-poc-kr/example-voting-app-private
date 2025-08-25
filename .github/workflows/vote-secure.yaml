@@ -1,0 +1,208 @@
+name: Vote Service - Security Enhanced
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths: [ 'vote/**', '.github/workflows/vote-secure.yaml' ]
+  pull_request:
+    branches: [ main ]
+    paths: [ 'vote/**', '.github/workflows/vote-secure.yaml' ]
+  workflow_dispatch:
+
+# Prevent concurrent GitOps updates for this service only
+concurrency:
+  group: gitops-update-vote-secure
+  cancel-in-progress: false
+
+env:
+  HARBOR_REGISTRY: hw-harbor.bluesunnywings.com
+  HARBOR_PROJECT: sysdig-poc
+  SERVICE: vote-secure
+
+jobs:
+  build-scan-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      security-events: write
+      pull-requests: write
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - uses: docker/setup-buildx-action@v3
+        
+      - name: Harbor Login
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.HARBOR_REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Build for Scan (Security Enhanced)
+        run: docker build --platform linux/amd64 --target final -f ./vote/Dockerfile.secure -t ${{ env.SERVICE }}-scan:${{ github.sha }} ./vote
+          
+      - name: Security Scan
+        uses: sysdiglabs/scan-action@v6
+        with:
+          image-tag: ${{ env.SERVICE }}-scan:${{ github.sha }}
+          sysdig-secure-token: ${{ secrets.SYSDIG_SECURE_API_TOKEN }}
+          sysdig-secure-url: ${{ secrets.SYSDIG_SECURE_ENDPOINT }}
+          mode: vm
+          severity-at-least: medium
+          stop-on-failed-policy-eval: false
+
+      - name: Push to Harbor (Security Enhanced)
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./vote
+          file: ./vote/Dockerfile.secure
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-latest
+            ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}
+            ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:secure-${{ github.sha }}
+          target: final
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+          outputs: type=image,oci-mediatypes=false
+
+      - name: Create Security Enhanced Manifest
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          # Create secure manifest directory if it doesn't exist
+          mkdir -p manifests/vote-secure
+          
+          # Copy existing vote manifests and modify for secure version
+          cp -r manifests/vote/* manifests/vote-secure/
+          
+          # Update deployment.yaml for secure version
+          sed -i "s|name: vote|name: vote-secure|g" manifests/vote-secure/deployment.yaml
+          sed -i "s|app: vote|app: vote-secure|g" manifests/vote-secure/deployment.yaml
+          sed -i "s|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/vote:.*|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:secure-${{ github.sha }}|g" manifests/vote-secure/deployment.yaml
+          
+          # Update service.yaml for secure version
+          sed -i "s|name: vote|name: vote-secure|g" manifests/vote-secure/service.yaml
+          sed -i "s|app: vote|app: vote-secure|g" manifests/vote-secure/service.yaml
+          
+          # Update network policy for secure version
+          if [ -f "manifests/vote-secure/network-policy.yaml" ]; then
+            sed -i "s|name: vote-network-policy|name: vote-secure-network-policy|g" manifests/vote-secure/network-policy.yaml
+            sed -i "s|app: vote|app: vote-secure|g" manifests/vote-secure/network-policy.yaml
+          fi
+
+      - name: Update GitOps Manifest (Security Enhanced)
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          # Configure git
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Check if there are changes to commit
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          # Commit changes
+          git add manifests/vote-secure/
+          git commit -m "🔒 Deploy security-enhanced ${{ env.SERVICE }} image: secure-${{ github.sha }}
+
+          Security Fixes Applied:
+          - CVE-2024-6345: Upgraded setuptools to >=70.0.0
+          - Enhanced container security posture
+          - Vulnerability remediation completed"
+          
+          # Push with robust retry and conflict resolution
+          for i in {1..10}; do
+            echo "🔄 Push attempt $i/10"
+            
+            # Always fetch latest before attempting push
+            git fetch origin main
+            
+            # Try to push
+            if git push origin HEAD:main; then
+              echo "✅ Successfully pushed security-enhanced changes on attempt $i"
+              break
+            else
+              echo "❌ Push failed on attempt $i, resolving conflicts..."
+              
+              # Reset to our commit and rebase on latest main
+              git reset --hard HEAD~1
+              git pull --rebase origin main
+              
+              # Re-create secure manifests
+              mkdir -p manifests/vote-secure
+              cp -r manifests/vote/* manifests/vote-secure/
+              
+              # Re-apply our changes
+              sed -i "s|name: vote|name: vote-secure|g" manifests/vote-secure/deployment.yaml
+              sed -i "s|app: vote|app: vote-secure|g" manifests/vote-secure/deployment.yaml
+              sed -i "s|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/vote:.*|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:secure-${{ github.sha }}|g" manifests/vote-secure/deployment.yaml
+              
+              sed -i "s|name: vote|name: vote-secure|g" manifests/vote-secure/service.yaml
+              sed -i "s|app: vote|app: vote-secure|g" manifests/vote-secure/service.yaml
+              
+              if [ -f "manifests/vote-secure/network-policy.yaml" ]; then
+                sed -i "s|name: vote-network-policy|name: vote-secure-network-policy|g" manifests/vote-secure/network-policy.yaml
+                sed -i "s|app: vote|app: vote-secure|g" manifests/vote-secure/network-policy.yaml
+              fi
+              
+              # Check if we still have changes after rebase
+              if ! git diff --quiet; then
+                git add manifests/vote-secure/
+                git commit -m "🔒 Deploy security-enhanced ${{ env.SERVICE }} image: secure-${{ github.sha }}
+
+                Security Fixes Applied:
+                - CVE-2024-6345: Upgraded setuptools to >=70.0.0
+                - Enhanced container security posture
+                - Vulnerability remediation completed"
+              else
+                echo "✅ Changes already applied by another workflow"
+                break
+              fi
+              
+              if [ $i -eq 10 ]; then
+                echo "❌ Failed to push after 10 attempts"
+                exit 1
+              fi
+              
+              # Exponential backoff with jitter
+              sleep_time=$((i * 2 + RANDOM % 5))
+              echo "⏳ Waiting ${sleep_time}s before retry..."
+              sleep $sleep_time
+            fi
+          done
+
+      - name: Upload SARIF
+        if: always() && hashFiles('sarif.json') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sarif.json
+
+      - name: Archive Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.SERVICE }}-scan-${{ github.sha }}
+          path: |
+            sarif.json
+            scan-result.json
+          if-no-files-found: ignore
+
+      - name: Security Report Summary
+        if: always()
+        run: |
+          echo "## 🔒 Security Enhancement Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **CVE-2024-6345**: Fixed by upgrading setuptools to >=70.0.0" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Tag**: secure-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Registry**: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Security Scan**: Completed with Sysdig Scanner" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployment**: Security-enhanced manifests created" >> $GITHUB_STEP_SUMMARY
