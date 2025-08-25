@@ -120,13 +120,27 @@ jobs:
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # 서명된 이미지로 매니페스트 업데이트 (서명 확인 후)
+          # 서명된 이미지로 매니페스트 업데이트
           sed -i "s|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:.*|image: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.SERVICE }}:v2-${{ github.sha }}|g" manifests/vote/deployment.yaml
           
           # Cosign 서명 메타데이터 추가 (정책에서 확인용)
+          # Deployment 레벨에 어노테이션 추가
           if ! grep -q "cosign.sigstore.dev/verified" manifests/vote/deployment.yaml; then
-            # Add annotation to deployment metadata
-            sed -i '/metadata:/a\  annotations:\n    cosign.sigstore.dev/verified: "true"' manifests/vote/deployment.yaml
+            # Find the line with 'metadata:' under 'kind: Deployment' and add annotation
+            awk '
+            /^kind: Deployment/ { in_deployment = 1 }
+            /^---/ { in_deployment = 0 }
+            /^metadata:/ && in_deployment && !added {
+              print $0
+              print "  annotations:"
+              print "    cosign.sigstore.dev/verified: \"true\""
+              print "    cosign.sigstore.dev/signed-at: \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\""
+              added = 1
+              next
+            }
+            { print }
+            ' manifests/vote/deployment.yaml > manifests/vote/deployment.yaml.tmp
+            mv manifests/vote/deployment.yaml.tmp manifests/vote/deployment.yaml
           fi
           
           if git diff --quiet manifests/vote/deployment.yaml; then
